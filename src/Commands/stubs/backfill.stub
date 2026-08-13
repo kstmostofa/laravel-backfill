@@ -1,0 +1,33 @@
+<?php
+
+namespace {{ namespace }};
+
+use Illuminate\Database\Eloquent\Builder;
+use Kstmostofa\Backfill\Backfill;
+
+class {{ class }} extends Backfill
+{
+    public int $batchSize = 1000;
+
+    public int $sleepMs = 100;
+
+    /**
+     * The rows to process.
+     *
+     * Make this query self-excluding — once a row has been processed it should
+     * no longer match. That single property is what makes a backfill safe to
+     * kill and restart at any moment.
+     */
+    public function collection(): Builder
+    {
+        // return \App\Models\User::query()->whereNull('slug');
+    }
+
+    /**
+     * Apply the change to one row.
+     */
+    public function process($record): void
+    {
+        //
+    }
+}

@@ -1,0 +1,59 @@
+{
+    "name": "kstmostofa/laravel-backfill",
+    "description": "Safe, resumable, one-off data backfills for Laravel. Keyset pagination, atomic cursor persistence, per-row error isolation, and crash recovery for bulk data changes over large tables.",
+    "keywords": [
+        "laravel",
+        "backfill",
+        "data-migration",
+        "database",
+        "batch",
+        "chunking"
+    ],
+    "license": "MIT",
+    "authors": [
+        {
+            "name": "Md Mostafijur Rahman",
+            "email": "mostofa122@mail.com",
+            "homepage": "https://github.com/kstmostofa"
+        }
+    ],
+    "require": {
+        "php": "^8.2",
+        "illuminate/console": "^11.0|^12.0|^13.0",
+        "illuminate/database": "^11.0|^12.0|^13.0",
+        "illuminate/support": "^11.0|^12.0|^13.0"
+    },
+    "require-dev": {
+        "orchestra/testbench": "^9.0|^10.0|^11.0",
+        "pestphp/pest": "^3.0|^4.0",
+        "pestphp/pest-plugin-laravel": "^3.0|^4.0"
+    },
+    "autoload": {
+        "psr-4": {
+            "Kstmostofa\\Backfill\\": "src/"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "Kstmostofa\\Backfill\\Tests\\": "tests/"
+        }
+    },
+    "extra": {
+        "laravel": {
+            "providers": [
+                "Kstmostofa\\Backfill\\BackfillServiceProvider"
+            ]
+        }
+    },
+    "scripts": {
+        "test": "vendor/bin/pest"
+    },
+    "config": {
+        "sort-packages": true,
+        "allow-plugins": {
+            "pestphp/pest-plugin": true
+        }
+    },
+    "minimum-stability": "stable",
+    "prefer-stable": true
+}
