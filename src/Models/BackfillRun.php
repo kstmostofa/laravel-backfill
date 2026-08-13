@@ -2,7 +2,9 @@
 
 namespace Kstmostofa\Backfill\Models;
 
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Prunable;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Kstmostofa\Backfill\Enums\RunStatus;
 
@@ -30,6 +32,8 @@ use Kstmostofa\Backfill\Enums\RunStatus;
  */
 class BackfillRun extends Model
 {
+    use Prunable;
+
     protected $table = 'backfill_runs';
 
     protected $guarded = [];
@@ -58,6 +62,31 @@ class BackfillRun extends Model
     public function errors(): HasMany
     {
         return $this->hasMany(BackfillRunError::class, 'run_id');
+    }
+
+    /**
+     * Runs that have finished and aged out. Unfinished runs are never pruned —
+     * a paused run from six months ago still holds a cursor someone may want.
+     */
+    public function prunable(): Builder
+    {
+        $days = (int) config('backfill.prune_runs_after_days', 90);
+
+        return static::query()
+            ->whereIn('status', [
+                RunStatus::Completed->value,
+                RunStatus::Cancelled->value,
+                RunStatus::Failed->value,
+            ])
+            ->whereNotNull('finished_at')
+            ->where('finished_at', '<', now()->subDays($days));
+    }
+
+    protected function pruning(): void
+    {
+        $this->errors()->delete();
+
+        BackfillRunBatch::query()->where('run_id', $this->id)->delete();
     }
 
     /**

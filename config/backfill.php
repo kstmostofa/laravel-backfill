@@ -147,6 +147,53 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Queued Runs
+    |--------------------------------------------------------------------------
+    | `backfill:run --queue` dispatches a job that runs batches_per_job batches
+    | and then queues itself again. Short jobs are the point: a worker restart
+    | mid-deploy costs one batch, and the next job resumes from the cursor.
+    */
+    'queue' => [
+        'connection' => null,
+        'queue' => null,
+        'batches_per_job' => 25,
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
+    | Notifications
+    |--------------------------------------------------------------------------
+    | Sent when a run finishes, fails, or pauses itself. An operator pausing a
+    | run on purpose is never notified — they already know.
+    */
+    'notifications' => [
+        'enabled' => false,
+        'on' => ['completed', 'failed', 'paused'],
+        'mail' => null,
+        'slack_webhook' => null,
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
+    | Dashboard
+    |--------------------------------------------------------------------------
+    | A Livewire dashboard for watching and controlling runs. Requires
+    | livewire/livewire; it silently stays off if that is not installed.
+    |
+    | Access is denied by default outside local. Grant it in a service provider:
+    |
+    |     Kstmostofa\Backfill\Dashboard\Dashboard::auth(
+    |         fn ($request) => $request->user()?->isAdmin()
+    |     );
+    */
+    'dashboard' => [
+        'enabled' => false,
+        'path' => 'backfills',
+        'middleware' => ['web'],
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
     | Batch Audit Trail
     |--------------------------------------------------------------------------
     | Records one row per batch in backfill_run_batches. Useful for working out

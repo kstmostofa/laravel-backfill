@@ -8,6 +8,15 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use Kstmostofa\Backfill\Backfill;
 use Kstmostofa\Backfill\Enums\RunStatus;
+use Kstmostofa\Backfill\Enums\StopReason;
+use Kstmostofa\Backfill\Events\BackfillCompleted;
+use Kstmostofa\Backfill\Events\BackfillFailed;
+use Kstmostofa\Backfill\Events\BackfillPaused;
+use Kstmostofa\Backfill\Events\BackfillResumed;
+use Kstmostofa\Backfill\Events\BackfillStarted;
+use Kstmostofa\Backfill\Events\BatchProcessed;
+use Kstmostofa\Backfill\Events\RowFailed;
+use Kstmostofa\Backfill\Events\ThrottleEngaged;
 use Kstmostofa\Backfill\Exceptions\BackfillRefused;
 use Kstmostofa\Backfill\Models\BackfillRun;
 use Kstmostofa\Backfill\Models\BackfillRunBatch;
@@ -78,6 +87,8 @@ class BackfillRunner
             $this->signals->listen();
             $this->applyTimeouts();
 
+            $resumed = $run->cursor !== null;
+
             $run->forceFill([
                 'status' => RunStatus::Running,
                 'started_at' => $run->started_at ?? now(),
@@ -85,6 +96,12 @@ class BackfillRunner
                 'finished_at' => null,
                 'error' => null,
             ])->save();
+
+            BackfillStarted::dispatch($run, $resumed);
+
+            if ($resumed) {
+                BackfillResumed::dispatch($run, $run->cursor);
+            }
 
             $backfill->beforeRun($run);
 
@@ -94,6 +111,7 @@ class BackfillRunner
 
             if ($run->status === RunStatus::Running) {
                 $this->finish($run, RunStatus::Completed);
+                BackfillCompleted::dispatch($run);
             }
 
             $backfill->afterRun($run);
@@ -104,6 +122,7 @@ class BackfillRunner
             if ($run) {
                 $run->refresh();
                 $this->finish($run, RunStatus::Failed, $e->getMessage());
+                BackfillFailed::dispatch($run, $e);
             }
 
             throw $e;
@@ -155,12 +174,14 @@ class BackfillRunner
             $sessionProcessed += $outcome->processed;
             $sessionFailed += $outcome->failed;
 
+            BatchProcessed::dispatch($run, $outcome);
+
             if ($options->onBatch) {
                 ($options->onBatch)($run, $rows->count());
             }
 
             if ($this->breaker->shouldTrip($sessionProcessed, $sessionFailed)) {
-                $this->finish($run, RunStatus::Paused, reason: $this->breaker->reason(
+                $this->pause($run, StopReason::CircuitBreaker, $this->breaker->reason(
                     $sessionProcessed,
                     $sessionFailed,
                     $run->backfill,
@@ -174,7 +195,7 @@ class BackfillRunner
             }
 
             if ($options->maxBatches !== null && $batches >= $options->maxBatches) {
-                $this->finish($run, RunStatus::Paused, reason: "Stopped after {$batches} batches as requested.");
+                $this->pause($run, StopReason::MaxBatches, "Stopped after {$batches} batches as requested.");
 
                 return;
             }
@@ -187,7 +208,8 @@ class BackfillRunner
             );
 
             if ($decision->pause) {
-                $this->finish($run, RunStatus::Paused, reason: $decision->reason);
+                ThrottleEngaged::dispatch($run, $decision);
+                $this->pause($run, StopReason::Throttle, $decision->reason);
 
                 return;
             }
@@ -195,8 +217,12 @@ class BackfillRunner
             $sleepMs = $decision->sleepMs;
             $batchSize = $decision->batchSize;
 
-            if ($decision->engaged() && $options->onThrottle) {
-                ($options->onThrottle)($decision);
+            if ($decision->engaged()) {
+                ThrottleEngaged::dispatch($run, $decision);
+
+                if ($options->onThrottle) {
+                    ($options->onThrottle)($decision);
+                }
             }
 
             if ($sleepMs > 0) {
@@ -281,8 +307,12 @@ class BackfillRunner
         $backfill->afterBatch($rows, $run);
 
         foreach ($failures as [$record, $e]) {
-            $this->recordError($run, $this->keyOf($record, $key), $e);
+            $recordId = $this->keyOf($record, $key);
+
+            $this->recordError($run, $recordId, $e);
             $backfill->onRowFailed($record, $e);
+
+            RowFailed::dispatch($run, $record, $recordId === null ? null : (string) $recordId, $e);
         }
 
         $this->persistProgress($run, $lastKey, $processed, $failed);
@@ -402,18 +432,33 @@ class BackfillRunner
         $status = $this->externalStatus($run);
 
         if ($status === RunStatus::Paused || $status === RunStatus::Cancelled) {
-            $this->finish($run, $status);
+            $this->finish($run, $status, reason: 'Stopped by an operator.', code: StopReason::Operator);
+
+            if ($status === RunStatus::Paused) {
+                BackfillPaused::dispatch($run, StopReason::Operator, 'Stopped by an operator.');
+            }
 
             return true;
         }
 
         if ($this->signals->shouldStop()) {
-            $this->finish($run, RunStatus::Paused, reason: 'Received a shutdown signal; stopped once the batch in flight had committed.');
+            $this->pause(
+                $run,
+                StopReason::Signal,
+                'Received a shutdown signal; stopped once the batch in flight had committed.',
+            );
 
             return true;
         }
 
         return false;
+    }
+
+    protected function pause(BackfillRun $run, StopReason $code, ?string $message): void
+    {
+        $this->finish($run, RunStatus::Paused, reason: $message, code: $code);
+
+        BackfillPaused::dispatch($run, $code, $message);
     }
 
     /**
@@ -431,12 +476,18 @@ class BackfillRunner
         };
     }
 
-    protected function finish(BackfillRun $run, RunStatus $status, ?string $error = null, ?string $reason = null): void
+    protected function finish(BackfillRun $run, RunStatus $status, ?string $error = null, ?string $reason = null, ?StopReason $code = null): void
     {
         $meta = $run->meta ?? [];
 
         if ($reason !== null) {
             $meta['stop_reason'] = $reason;
+        }
+
+        // The sentence above is for whoever reads the status output; this is
+        // what --queue mode branches on to decide whether to chain another job.
+        if ($code !== null) {
+            $meta['stop_code'] = $code->value;
         }
 
         $run->forceFill([

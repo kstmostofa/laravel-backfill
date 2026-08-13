@@ -11,7 +11,12 @@ abstract class TestCase extends Orchestra
 {
     protected function getPackageProviders($app): array
     {
-        return [BackfillServiceProvider::class];
+        return array_filter([
+            class_exists(\Livewire\LivewireServiceProvider::class)
+                ? \Livewire\LivewireServiceProvider::class
+                : null,
+            BackfillServiceProvider::class,
+        ]);
     }
 
     /**
@@ -26,8 +31,16 @@ abstract class TestCase extends Orchestra
 
     protected function defineEnvironment($app): void
     {
+        // Livewire renders through the encrypter, so the app needs a key.
+        $app['config']->set('app.key', 'base64:'.base64_encode(random_bytes(32)));
+
         $app['config']->set('database.default', 'testing');
         $app['config']->set('database.connections.testing', $this->connectionConfig());
+
+        // Routes are registered at boot, so this has to be set before the app
+        // boots rather than in a test's beforeEach. The Authorize middleware
+        // still gates every request.
+        $app['config']->set('backfill.dashboard.enabled', true);
 
         $app['config']->set('backfill.path', __DIR__.'/Fixtures/Backfills');
         $app['config']->set('backfill.connection', null);

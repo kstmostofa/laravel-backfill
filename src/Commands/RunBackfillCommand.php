@@ -13,6 +13,7 @@ use Kstmostofa\Backfill\Enums\RunStatus;
 use Kstmostofa\Backfill\Exceptions\BackfillAlreadyRunning;
 use Kstmostofa\Backfill\Exceptions\BackfillNotFound;
 use Kstmostofa\Backfill\Exceptions\BackfillRefused;
+use Kstmostofa\Backfill\Jobs\RunBackfillJob;
 use Kstmostofa\Backfill\Models\BackfillRun;
 use Kstmostofa\Backfill\Runner\BackfillRunner;
 use Kstmostofa\Backfill\Runner\RunOptions;
@@ -26,6 +27,8 @@ class RunBackfillCommand extends Command
         {name : The backfill to run}
         {--dry-run : Report what would happen and write nothing}
         {--samples= : Rows to sample during a dry run}
+        {--queue : Run on the queue as a chain of short jobs}
+        {--batches-per-job= : Batches each queued job handles before chaining}
         {--fresh : Ignore any resumable run and start from the beginning}
         {--batch-size= : Rows per batch}
         {--sleep= : Milliseconds to sleep between batches}
@@ -47,6 +50,10 @@ class RunBackfillCommand extends Command
 
         if ($this->option('dry-run')) {
             return $this->dryRun($dryRunner, $backfill);
+        }
+
+        if ($this->option('queue')) {
+            return $this->queue($backfill);
         }
 
         $resumable = $this->option('fresh') ? null : $runner->resumableRun($backfill);
@@ -104,6 +111,34 @@ class RunBackfillCommand extends Command
         $this->newLine(2);
 
         return $this->report($run);
+    }
+
+    protected function queue(Backfill $backfill): int
+    {
+        if (! $this->confirmToProceed()) {
+            return self::FAILURE;
+        }
+
+        RunBackfillJob::dispatch(
+            $backfill->name(),
+            $this->intOption('batches-per-job'),
+            $this->intOption('batch-size'),
+            $this->intOption('sleep'),
+            (bool) $this->option('force'),
+            $this->startedBy(),
+        )
+            ->onConnection(config('backfill.queue.connection'))
+            ->onQueue(config('backfill.queue.queue'));
+
+        $this->components->info(sprintf(
+            'Queued [%s]. Each job runs %d batches and then queues the next, so a deploy '
+            .'costs at most one batch. Watch it with `backfill:status %s`.',
+            $backfill->name(),
+            $this->intOption('batches-per-job') ?? (int) config('backfill.queue.batches_per_job', 25),
+            $backfill->name(),
+        ));
+
+        return self::SUCCESS;
     }
 
     protected function dryRun(DryRunner $dryRunner, Backfill $backfill): int

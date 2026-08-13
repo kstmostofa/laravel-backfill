@@ -73,7 +73,61 @@ php artisan backfill:cancel user-slugs          # stop for good; will not resume
 php artisan backfill:retry-failed user-slugs    # re-process only the rows that failed
 ```
 
-Useful flags on `backfill:run`: `--dry-run` and `--samples=`, `--fresh` (ignore a resumable run), `--batch-size=`, `--sleep=`, `--max-batches=` (stop cleanly after N batches), `--no-count` (skip the up-front estimate on tables too big to count), `--force` (skip the production guards and confirmation).
+Useful flags on `backfill:run`: `--dry-run` and `--samples=`, `--queue` and `--batches-per-job=`, `--fresh` (ignore a resumable run), `--batch-size=`, `--sleep=`, `--max-batches=` (stop cleanly after N batches), `--no-count` (skip the up-front estimate on tables too big to count), `--force` (skip the production guards and confirmation).
+
+## Running on the queue
+
+```bash
+php artisan backfill:run user-slugs --queue
+```
+
+This dispatches a job that runs 25 batches and then queues the next one, rather than a single long-lived job. Short jobs are the whole point: a worker restart mid-deploy costs at most one batch, and the next job resumes from the committed cursor. Configure the connection, queue and slice size under `backfill.queue`.
+
+The chain stops on its own when the backfill finishes — and, importantly, it also stops when the run pauses for a reason nobody asked for. A circuit-breaker or throttle pause would only trip again on the next job, so those need a human to look first. That distinction is what the `stop_code` on each run records.
+
+## The dashboard
+
+An optional Livewire dashboard for watching and driving runs: live progress and throughput, cursor, a batch-duration sparkline, and the failed rows with a retry button. Actions taken here are queued, not run in the web request.
+
+```bash
+composer require livewire/livewire
+```
+
+```php
+// config/backfill.php
+'dashboard' => ['enabled' => true, 'path' => 'backfills', 'middleware' => ['web']],
+```
+
+It is **closed by default** outside local development, because it can start and cancel data changes over production tables. Open it deliberately, in a service provider:
+
+```php
+use Kstmostofa\Backfill\Dashboard\Dashboard;
+
+Dashboard::auth(fn ($request) => $request->user()?->isAdmin() === true);
+```
+
+The package works fine without Livewire — the dashboard simply does not register.
+
+## Events
+
+Every run emits `BackfillStarted`, `BackfillResumed`, `BatchProcessed`, `RowFailed`, `BackfillPaused`, `BackfillCompleted`, `BackfillFailed` and `ThrottleEngaged` under `Kstmostofa\Backfill\Events`.
+
+`BackfillPaused` carries a `StopReason` and a `wasAutomatic()` helper, so you can tell a circuit-breaker or throttle pause from an operator pressing pause. Note that `BatchProcessed` fires on every batch — thousands of times on a large run — so keep those listeners cheap and do not queue them.
+
+Notifications are built on the same events and are off by default:
+
+```php
+'notifications' => [
+    'enabled' => true,
+    'on' => ['completed', 'failed', 'paused'],
+    'mail' => 'ops@example.com',
+    'slack_webhook' => 'https://hooks.slack.com/services/...',
+],
+```
+
+Only three moments are worth interrupting someone: a run finished, failed, or paused itself. An operator pausing a run on purpose is never notified — they already know. A mail server that is down cannot turn a completed run into a failed one; delivery errors are swallowed deliberately.
+
+Slack posts straight to an incoming webhook rather than going through a notification channel, so Slack support does not drag in another package.
 
 ## The dry run
 
@@ -162,7 +216,7 @@ BACKFILL_DRIVER=pgsql composer test    # PostgreSQL 13+
 
 Connection details come from `BACKFILL_MYSQL_*` and `BACKFILL_PGSQL_*` environment variables; the defaults match a stock local MySQL and PostgreSQL with a `laravel_backfill_test` database. The chaos tests need the `pcntl` and `posix` extensions and skip themselves if either is missing.
 
-Verified green on all three: **140 tests, 348 assertions** against SQLite, MySQL 8.4 and PostgreSQL 18, with the SIGKILL chaos test running for real on each.
+Verified green on all three: **181 tests, 420 assertions** against SQLite, MySQL 8.4 and PostgreSQL 18, with the SIGKILL chaos test running for real on each.
 
 ### Why the savepoints are not optional
 
@@ -224,8 +278,15 @@ The helper defaults to a batch size of 2 so your tests exercise the real paginat
 | `dry_run.samples` | `5` | Rows processed and rolled back during `--dry-run` |
 | `guards.max_rows_without_confirmation` | `1000000` | Refuse a bigger run without `--force` |
 | `guards.deploy_freeze` | disabled | Windows during which runs are refused |
+| `queue.connection` / `queue.queue` | `null` | Where `--queue` dispatches to |
+| `queue.batches_per_job` | `25` | Batches each queued job runs before chaining |
+| `notifications.enabled` | `false` | Notify on completion, failure and auto-pause |
+| `notifications.mail` | `null` | Address (or array) to email |
+| `notifications.slack_webhook` | `null` | Slack incoming webhook URL |
+| `dashboard.enabled` | `false` | Register the Livewire dashboard route |
+| `dashboard.path` / `middleware` | `backfills` / `['web']` | Where it lives and what guards it |
 | `record_batches` | `false` | Write one audit row per batch |
-| `prune_runs_after_days` | `90` | Retention for finished runs |
+| `prune_runs_after_days` | `90` | Retention for finished runs, via `model:prune` |
 
 ## Backfill API
 
@@ -246,16 +307,16 @@ The helper defaults to a batch size of 2 so your tests exercise the real paginat
 
 Integer, UUID and ULID keys all round-trip: the cursor is stored as a string and cast back based on the model's key type.
 
-## Status: v0.2
+## Status: v0.3
 
 Shipped and tested across SQLite, MySQL and PostgreSQL:
 
 - **v0.1** — the class and discovery, the keyset runner, cursor persistence, per-row error isolation, run/status/pause/resume/cancel, the run lock, graceful shutdown
 - **v0.2** — dry run with real diffs and side-effect interception, adaptive throttling on replication lag, `backfill:retry-failed`, statement and lock timeouts, transient-failure retries, the circuit breaker, production guards, and the optional per-batch audit trail
+- **v0.3** — the Livewire dashboard, `--queue` mode with self-chaining jobs, the eight lifecycle events, notifications, and run pruning
 
 Planned:
 
-- **v0.3** — Livewire dashboard, `--queue` mode, events, notifications
 - **v0.4** — operator panel with declared parameters, ledger mode for external side effects, Pulse card, per-tenant cursors
 
 ### Known limits
