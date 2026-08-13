@@ -189,6 +189,12 @@ return [
     'dashboard' => [
         'enabled' => false,
         'path' => 'backfills',
+
+        // The operator panel: only backfills marked $operatorRunnable, only
+        // their declared parameters, gated separately with
+        // Dashboard::operatorAuth().
+        'operator_path' => 'backfills/tasks',
+
         'middleware' => ['web'],
     ],
 

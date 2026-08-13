@@ -37,6 +37,9 @@ class RunBackfillJob implements ShouldQueue
         public readonly ?int $sleepMs = null,
         public readonly bool $force = false,
         public readonly ?string $startedBy = null,
+        /** @var array<string, mixed> */
+        public readonly array $parameters = [],
+        public readonly ?string $tenant = null,
     ) {}
 
     public function handle(BackfillRegistry $registry, BackfillRunner $runner): void
@@ -50,6 +53,8 @@ class RunBackfillJob implements ShouldQueue
                 maxBatches: $this->batchesPerJob(),
                 startedBy: $this->startedBy ?? 'queue',
                 force: $this->force,
+                parameters: $this->parameters,
+                tenant: $this->tenant,
             ));
         } catch (BackfillAlreadyRunning) {
             // Another worker already has it. Nothing to do and nothing wrong.
@@ -87,6 +92,8 @@ class RunBackfillJob implements ShouldQueue
             $this->sleepMs,
             $this->force,
             $this->startedBy,
+            $this->parameters,
+            $this->tenant,
         )
             ->onConnection($this->connection ?? config('backfill.queue.connection'))
             ->onQueue($this->queue ?? config('backfill.queue.queue'));

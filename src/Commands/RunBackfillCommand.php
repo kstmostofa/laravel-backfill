@@ -15,6 +15,7 @@ use Kstmostofa\Backfill\Exceptions\BackfillNotFound;
 use Kstmostofa\Backfill\Exceptions\BackfillRefused;
 use Kstmostofa\Backfill\Jobs\RunBackfillJob;
 use Kstmostofa\Backfill\Models\BackfillRun;
+use Kstmostofa\Backfill\Parameters\ParameterBag;
 use Kstmostofa\Backfill\Runner\BackfillRunner;
 use Kstmostofa\Backfill\Runner\RunOptions;
 use Kstmostofa\Backfill\Runner\ThrottleDecision;
@@ -34,6 +35,8 @@ class RunBackfillCommand extends Command
         {--sleep= : Milliseconds to sleep between batches}
         {--max-batches= : Stop cleanly after this many batches}
         {--no-count : Skip the row count used for progress estimates}
+        {--param=* : Set a declared parameter, as key=value}
+        {--tenant= : Run only this tenant instead of every one}
         {--force : Skip the production guards and confirmation}';
 
     protected $description = 'Run a backfill, resuming from its last committed cursor';
@@ -52,11 +55,21 @@ class RunBackfillCommand extends Command
             return $this->dryRun($dryRunner, $backfill);
         }
 
-        if ($this->option('queue')) {
-            return $this->queue($backfill);
+        $parameters = $this->parameters($backfill);
+
+        if ($parameters === null) {
+            return self::FAILURE;
         }
 
-        $resumable = $this->option('fresh') ? null : $runner->resumableRun($backfill);
+        if ($this->option('queue')) {
+            return $this->queue($backfill, $parameters);
+        }
+
+        if ($this->shouldRunEveryTenant($backfill)) {
+            return $this->runEveryTenant($backfill, $runner, $parameters);
+        }
+
+        $resumable = $this->option('fresh') ? null : $runner->resumableRun($backfill, $this->option('tenant'));
 
         if ($resumable) {
             $this->components->info(sprintf(
@@ -82,6 +95,8 @@ class RunBackfillCommand extends Command
             maxBatches: $this->intOption('max-batches'),
             startedBy: $this->startedBy(),
             force: (bool) $this->option('force'),
+            parameters: $parameters,
+            tenant: $this->option('tenant'),
             onBatch: function (BackfillRun $run, int $count) use (&$bar) {
                 if ($bar === null && $run->total_estimate) {
                     $bar = $this->output->createProgressBar($run->total_estimate);
@@ -113,7 +128,91 @@ class RunBackfillCommand extends Command
         return $this->report($run);
     }
 
-    protected function queue(Backfill $backfill): int
+    /**
+     * Read --param key=value pairs and validate them against what the backfill
+     * declares. Returns null when the input is wrong, having said why.
+     *
+     * @return array<string, mixed>|null
+     */
+    protected function parameters(Backfill $backfill): ?array
+    {
+        $raw = [];
+
+        foreach ((array) $this->option('param') as $pair) {
+            [$key, $value] = array_pad(explode('=', (string) $pair, 2), 2, null);
+
+            if ($value === null) {
+                $this->components->error("Parameter [{$pair}] should be written as key=value.");
+
+                return null;
+            }
+
+            $raw[$key] = $value;
+        }
+
+        if ($raw === [] && $backfill->parameters() === []) {
+            return [];
+        }
+
+        $result = ParameterBag::validate($backfill, $raw);
+
+        if ($result['errors'] !== []) {
+            foreach ($result['errors'] as $message) {
+                $this->components->error($message);
+            }
+
+            return null;
+        }
+
+        return $result['values'];
+    }
+
+    protected function shouldRunEveryTenant(Backfill $backfill): bool
+    {
+        return $this->option('tenant') === null && $backfill->tenants() !== null;
+    }
+
+    /**
+     * @param  array<string, mixed>  $parameters
+     */
+    protected function runEveryTenant(Backfill $backfill, BackfillRunner $runner, array $parameters): int
+    {
+        if (! $this->confirmToProceed()) {
+            return self::FAILURE;
+        }
+
+        $options = new RunOptions(
+            batchSize: $this->intOption('batch-size'),
+            sleepMs: $this->intOption('sleep'),
+            fresh: (bool) $this->option('fresh'),
+            withoutEstimate: (bool) $this->option('no-count'),
+            maxBatches: $this->intOption('max-batches'),
+            startedBy: $this->startedBy(),
+            force: (bool) $this->option('force'),
+            parameters: $parameters,
+        );
+
+        $runs = $runner->runAll($backfill, $options);
+        $failed = 0;
+
+        foreach ($runs as $run) {
+            $this->components->twoColumnDetail(
+                $run->tenant ?? 'default',
+                sprintf('%s processed, %s failed — %s', number_format($run->processed_count), number_format($run->failed_count), $run->status->value),
+            );
+
+            if ($run->status === RunStatus::Failed) {
+                $failed++;
+            }
+        }
+
+        return $failed > 0 ? self::FAILURE : self::SUCCESS;
+    }
+
+    /**
+     * @param  array<string, mixed>  $parameters
+     */
+    protected function queue(Backfill $backfill, array $parameters = []): int
     {
         if (! $this->confirmToProceed()) {
             return self::FAILURE;
@@ -126,6 +225,8 @@ class RunBackfillCommand extends Command
             $this->intOption('sleep'),
             (bool) $this->option('force'),
             $this->startedBy(),
+            $parameters,
+            $this->option('tenant'),
         )
             ->onConnection(config('backfill.queue.connection'))
             ->onQueue(config('backfill.queue.queue'));

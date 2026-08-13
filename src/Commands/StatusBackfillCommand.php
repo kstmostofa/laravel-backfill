@@ -6,6 +6,7 @@ use Illuminate\Console\Command;
 use Kstmostofa\Backfill\BackfillRegistry;
 use Kstmostofa\Backfill\Exceptions\BackfillNotFound;
 use Kstmostofa\Backfill\Models\BackfillRun;
+use Kstmostofa\Backfill\Runner\Ledger;
 
 class StatusBackfillCommand extends Command
 {
@@ -49,6 +50,39 @@ class StatusBackfillCommand extends Command
         $this->components->twoColumnDetail('Started', $run->started_at?->diffForHumans() ?? '—');
         $this->components->twoColumnDetail('Heartbeat', $run->heartbeat_at?->diffForHumans() ?? '—');
         $this->components->twoColumnDetail('Started by', $run->started_by ?? '—');
+
+        if ($run->tenant) {
+            $this->components->twoColumnDetail('Tenant', $run->tenant);
+        }
+
+        if ($run->skipped_count > 0) {
+            $this->components->twoColumnDetail('Skipped (ledger)', number_format($run->skipped_count));
+        }
+
+        if (! empty($run->meta['parameter_summary'])) {
+            $this->components->twoColumnDetail('Parameters', $run->meta['parameter_summary']);
+        }
+
+        if (! empty($run->meta['stop_reason'])) {
+            $this->newLine();
+            $this->components->warn($run->meta['stop_reason']);
+        }
+
+        // Rows claimed but never confirmed: the process died between marking a
+        // row and finishing it, so nobody knows whether the side effect escaped.
+        if ($backfill->ledger) {
+            $unconfirmed = app(Ledger::class)->unconfirmedCount($backfill->name());
+
+            if ($unconfirmed > 0) {
+                $this->newLine();
+                $this->components->warn(sprintf(
+                    '%s rows are claimed but unconfirmed — the run stopped part way through them, '
+                    .'so whether the side effect happened is unknown. They will not be retried '
+                    .'automatically.',
+                    number_format($unconfirmed),
+                ));
+            }
+        }
 
         if ($run->error) {
             $this->newLine();

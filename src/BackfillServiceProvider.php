@@ -17,10 +17,12 @@ use Kstmostofa\Backfill\Commands\RunBackfillCommand;
 use Kstmostofa\Backfill\Commands\StatusBackfillCommand;
 use Kstmostofa\Backfill\Dashboard\BackfillDashboard;
 use Kstmostofa\Backfill\Dashboard\Dashboard;
+use Kstmostofa\Backfill\Dashboard\OperatorPanel;
 use Kstmostofa\Backfill\Events\BackfillCompleted;
 use Kstmostofa\Backfill\Events\BackfillFailed;
 use Kstmostofa\Backfill\Events\BackfillPaused;
 use Kstmostofa\Backfill\Notifications\BackfillNotifier;
+use Kstmostofa\Backfill\Pulse\BackfillsCard;
 use Kstmostofa\Backfill\Runner\BackfillRunner;
 use Kstmostofa\Backfill\Runner\CircuitBreaker;
 use Kstmostofa\Backfill\Runner\ConnectionTimeouts;
@@ -104,6 +106,12 @@ class BackfillServiceProvider extends ServiceProvider
         }
 
         Livewire::component('backfill-dashboard', BackfillDashboard::class);
+        Livewire::component('backfill-operator', OperatorPanel::class);
+
+        // Add <livewire:backfill-pulse-card /> to your Pulse dashboard view.
+        if (class_exists(\Laravel\Pulse\Livewire\Card::class)) {
+            Livewire::component('backfill-pulse-card', BackfillsCard::class);
+        }
 
         if (! config('backfill.dashboard.enabled', false)) {
             return;
@@ -114,6 +122,16 @@ class BackfillServiceProvider extends ServiceProvider
             'middleware' => Dashboard::middleware(),
         ], function () {
             Route::get('/', fn () => view('backfill::layout'))->name('backfill.dashboard');
+        });
+
+        // The operator panel is a separate route with its own gate: the people
+        // who should be pasting order ids into a form are rarely the people who
+        // should be able to cancel a migration half way through.
+        Route::group([
+            'prefix' => Dashboard::operatorPath(),
+            'middleware' => Dashboard::operatorMiddleware(),
+        ], function () {
+            Route::get('/', fn () => view('backfill::operator-layout'))->name('backfill.operator');
         });
     }
 

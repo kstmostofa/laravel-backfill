@@ -34,6 +34,16 @@ class BackfillRefused extends RuntimeException
         ));
     }
 
+    public static function parametersChanged(string $name, string $previous): static
+    {
+        return new static(
+            "Backfill [{$name}] has a run in progress that was started with different "
+            ."parameters ({$previous}). Resuming it with new ones would mean half the rows "
+            .'were processed under one set of inputs and half under another. Resume it as it '
+            .'was, or cancel it and start fresh.'
+        );
+    }
+
     public static function duringFreeze(string $name, string $window): static
     {
         return new static(

@@ -15,6 +15,10 @@ abstract class TestCase extends Orchestra
             class_exists(\Livewire\LivewireServiceProvider::class)
                 ? \Livewire\LivewireServiceProvider::class
                 : null,
+            // Needed for the Pulse card's view namespace and x-pulse components.
+            class_exists(\Laravel\Pulse\PulseServiceProvider::class)
+                ? \Laravel\Pulse\PulseServiceProvider::class
+                : null,
             BackfillServiceProvider::class,
         ]);
     }

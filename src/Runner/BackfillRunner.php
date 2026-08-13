@@ -5,6 +5,7 @@ namespace Kstmostofa\Backfill\Runner;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 use Kstmostofa\Backfill\Backfill;
 use Kstmostofa\Backfill\Enums\RunStatus;
@@ -21,6 +22,7 @@ use Kstmostofa\Backfill\Exceptions\BackfillRefused;
 use Kstmostofa\Backfill\Models\BackfillRun;
 use Kstmostofa\Backfill\Models\BackfillRunBatch;
 use Kstmostofa\Backfill\Models\BackfillRunError;
+use Kstmostofa\Backfill\Parameters\ParameterBag;
 use Kstmostofa\Backfill\Support\MigrationGuard;
 use Kstmostofa\Backfill\Support\TransientFailure;
 use Throwable;
@@ -37,7 +39,43 @@ class BackfillRunner
         protected CircuitBreaker $breaker,
         protected Throttle $throttle,
         protected ProductionGuards $guards,
+        protected Ledger $ledger,
     ) {}
+
+    /**
+     * Run every tenant this backfill declares, each with its own cursor, and
+     * return the run for each. A single-tenant backfill returns one.
+     *
+     * @return array<int, BackfillRun>
+     */
+    public function runAll(Backfill $backfill, ?RunOptions $options = null): array
+    {
+        $tenants = $backfill->tenants();
+
+        if ($tenants === null) {
+            return [$this->run($backfill, $options)];
+        }
+
+        $runs = [];
+
+        foreach ($tenants as $tenant) {
+            $runs[] = $this->run($backfill, new RunOptions(
+                batchSize: $options?->batchSize,
+                sleepMs: $options?->sleepMs,
+                fresh: $options?->fresh ?? false,
+                withoutEstimate: $options?->withoutEstimate ?? false,
+                maxBatches: $options?->maxBatches,
+                startedBy: $options?->startedBy,
+                force: $options?->force ?? false,
+                onBatch: $options?->onBatch,
+                onThrottle: $options?->onThrottle,
+                parameters: $options?->parameters ?? [],
+                tenant: (string) $tenant,
+            ));
+        }
+
+        return $runs;
+    }
 
     public function run(Backfill $backfill, ?RunOptions $options = null): BackfillRun
     {
@@ -46,6 +84,12 @@ class BackfillRunner
         if (MigrationGuard::inMigration()) {
             throw BackfillRefused::insideMigration($backfill->name());
         }
+
+        if ($options->tenant !== null) {
+            $backfill->useTenant($options->tenant);
+        }
+
+        $backfill->withParameters($options->parameters);
 
         if (! $backfill->guard()) {
             throw BackfillRefused::byGuard($backfill->name());
@@ -74,7 +118,8 @@ class BackfillRunner
 
         // The lock comes before the run row, so losing the race to another
         // process leaves no half-started run behind to confuse the next resume.
-        $this->locks->acquire($backfill->name());
+        // Tenants are independent, so each gets its own lock.
+        $this->locks->acquire($this->lockKey($backfill, $options->tenant));
 
         $run = null;
         $this->durations = [];
@@ -82,7 +127,14 @@ class BackfillRunner
         try {
             $run = $this->resolveRun($backfill, $options, $rowCount);
 
-            $this->locks->attachRun($backfill->name(), $run->id);
+            $this->locks->attachRun($this->lockKey($backfill, $options->tenant), $run->id);
+
+            // A resumed run carries the parameters it was started with. Using
+            // this call's instead would silently change what the run means
+            // half way through.
+            $backfill->withParameters($run->meta['parameters'] ?? $options->parameters);
+
+            $this->warnAboutUnprotectedSideEffects($backfill);
 
             $this->signals->listen();
             $this->applyTimeouts();
@@ -129,10 +181,35 @@ class BackfillRunner
         } finally {
             $this->timeouts->reset($this->connection());
             $this->signals->release();
-            $this->locks->release($backfill->name());
+            $this->locks->release($this->lockKey($backfill, $options->tenant));
         }
 
         return $run->refresh();
+    }
+
+    protected function lockKey(Backfill $backfill, ?string $tenant): string
+    {
+        return $tenant === null ? $backfill->name() : $backfill->name().':'.$tenant;
+    }
+
+    /**
+     * The setup where a resume re-sends four million emails: work that reaches
+     * outside the database, with neither a ledger nor — as far as we can tell —
+     * anything stopping a redo.
+     */
+    protected function warnAboutUnprotectedSideEffects(Backfill $backfill): void
+    {
+        if (! $backfill->externalSideEffects || $backfill->ledger) {
+            return;
+        }
+
+        Log::warning(sprintf(
+            'Backfill [%s] declares external side effects but has no ledger. A batch that '
+            .'is retried or resumed after a crash will run process() again for those rows, '
+            .'re-sending anything it already sent. Set $ledger = true, or make collection() '
+            .'self-excluding so a processed row stops matching.',
+            $backfill->name(),
+        ));
     }
 
     protected function loop(Backfill $backfill, BackfillRun $run, RunOptions $options): void
@@ -280,12 +357,25 @@ class BackfillRunner
     {
         $processed = 0;
         $failed = 0;
+        $skipped = 0;
         $failures = [];
+
+        $alreadySeen = $backfill->ledger
+            ? $this->ledger->seen($backfill->name(), $rows->map(fn ($row) => $this->keyOf($row, $key))->all())
+            : [];
 
         if ($backfill->hydrateModels) {
             foreach ($rows as $record) {
+                $recordId = (string) $this->keyOf($record, $key);
+
+                if ($backfill->ledger && in_array($recordId, $alreadySeen, true)) {
+                    $skipped++;
+
+                    continue;
+                }
+
                 try {
-                    $this->processRow($backfill, $record);
+                    $this->processRow($backfill, $record, $run, $recordId);
                     $processed++;
                 } catch (Throwable $e) {
                     // One poisoned row must not take down a run of 8M. A busy
@@ -315,9 +405,9 @@ class BackfillRunner
             RowFailed::dispatch($run, $record, $recordId === null ? null : (string) $recordId, $e);
         }
 
-        $this->persistProgress($run, $lastKey, $processed, $failed);
+        $this->persistProgress($run, $lastKey, $processed, $failed, $skipped);
 
-        return new BatchOutcome($processed, $failed);
+        return new BatchOutcome($processed, $failed, skipped: $skipped);
     }
 
     /**
@@ -327,15 +417,35 @@ class BackfillRunner
      *
      * @param  mixed  $record
      */
-    protected function processRow(Backfill $backfill, $record): void
+    protected function processRow(Backfill $backfill, $record, BackfillRun $run, string $recordId): void
     {
-        if ($backfill->useTransactions) {
-            $this->connection()->transaction(fn () => $backfill->process($record));
+        if (! $backfill->ledger) {
+            if ($backfill->useTransactions) {
+                $this->connection()->transaction(fn () => $backfill->process($record));
+
+                return;
+            }
+
+            $backfill->process($record);
 
             return;
         }
 
+        // Claim first, in its own committed transaction, so a crash mid-row
+        // leaves an unconfirmed claim rather than a second email. The claim
+        // must not be inside the batch transaction or a rollback would erase
+        // the very record that prevents the redo.
+        if (! $this->ledger->claim($backfill->name(), $recordId, $run->id)) {
+            return;
+        }
+
+        // If this throws, the claim deliberately stays put. Whether a side
+        // effect escaped before the failure is unknowable from here, so the row
+        // shows up as an unconfirmed claim for a human to judge rather than
+        // being quietly retried into a second email.
         $backfill->process($record);
+
+        $this->ledger->confirm($backfill->name(), $recordId);
     }
 
     protected function fetchBatch(Backfill $backfill, string $key, $cursor, int $limit): Collection
@@ -355,17 +465,23 @@ class BackfillRunner
             : collect($query->toBase()->get());
     }
 
-    protected function persistProgress(BackfillRun $run, $lastKey, int $processed, int $failed): void
+    protected function persistProgress(BackfillRun $run, $lastKey, int $processed, int $failed, int $skipped = 0): void
     {
         $run->forceFill([
             'cursor' => (string) $lastKey,
             'processed_count' => $run->processed_count + $processed,
             'failed_count' => $run->failed_count + $failed,
+            'skipped_count' => $run->skipped_count + $skipped,
             'batch_count' => $run->batch_count + 1,
             'heartbeat_at' => now(),
         ])->save();
 
-        $this->locks->heartbeat($run->backfill);
+        $this->locks->heartbeat($this->lockKeyFor($run));
+    }
+
+    protected function lockKeyFor(BackfillRun $run): string
+    {
+        return $run->tenant === null ? $run->backfill : $run->backfill.':'.$run->tenant;
     }
 
     protected function recordBatch(BackfillRun $run, BatchOutcome $outcome, $firstKey, $lastKey): void
@@ -511,9 +627,11 @@ class BackfillRunner
     protected function resolveRun(Backfill $backfill, RunOptions $options, callable $rowCount): BackfillRun
     {
         if (! $options->fresh) {
-            $existing = $this->resumableRun($backfill);
+            $existing = $this->resumableRun($backfill, $options->tenant);
 
             if ($existing) {
+                $this->refuseConflictingParameters($backfill, $existing, $options);
+
                 $existing->forceFill([
                     'batch_size' => $options->batchSize ?? $existing->batch_size,
                     'sleep_ms' => $options->sleepMs ?? $existing->sleep_ms,
@@ -526,8 +644,16 @@ class BackfillRunner
 
         $batchSize = $options->batchSize ?? $backfill->resolvedBatchSize();
 
+        $meta = [];
+
+        if ($options->parameters !== []) {
+            $meta['parameters'] = $options->parameters;
+            $meta['parameter_summary'] = ParameterBag::summarise($backfill, $options->parameters);
+        }
+
         return BackfillRun::create([
             'backfill' => $backfill->name(),
+            'tenant' => $options->tenant,
             'backfill_class' => $backfill::class,
             'status' => RunStatus::Pending,
             'cursor' => null,
@@ -538,17 +664,45 @@ class BackfillRunner
             'dry_run' => false,
             'started_by' => $options->startedBy,
             'heartbeat_at' => now(),
+            'meta' => $meta === [] ? null : $meta,
         ]);
+    }
+
+    /**
+     * Picking up a paused run with different parameters would quietly change
+     * what that run means half way through — the first half processed one set
+     * of orders, the second half another. Refuse and make the choice explicit.
+     */
+    protected function refuseConflictingParameters(Backfill $backfill, BackfillRun $existing, RunOptions $options): void
+    {
+        if ($options->parameters === []) {
+            return;
+        }
+
+        $previous = $existing->meta['parameters'] ?? [];
+
+        if ($previous == $options->parameters) {
+            return;
+        }
+
+        throw BackfillRefused::parametersChanged(
+            $backfill->name(),
+            $existing->meta['parameter_summary'] ?? 'different parameters',
+        );
     }
 
     /**
      * The most recent run worth continuing. A run left in `running` state with
      * a cold heartbeat was hard-killed; mark it interrupted and offer it back.
      */
-    public function resumableRun(Backfill $backfill): ?BackfillRun
+    public function resumableRun(Backfill $backfill, ?string $tenant = null): ?BackfillRun
     {
         $latest = BackfillRun::query()
             ->where('backfill', $backfill->name())
+            ->when($tenant === null,
+                fn ($query) => $query->whereNull('tenant'),
+                fn ($query) => $query->where('tenant', $tenant),
+            )
             ->latest('id')
             ->first();
 

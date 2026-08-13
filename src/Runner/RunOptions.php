@@ -22,5 +22,14 @@ class RunOptions
         public ?Closure $onBatch = null,
         /** Called when the throttle changes pace: fn (ThrottleDecision $decision) */
         public ?Closure $onThrottle = null,
+        /**
+         * Operator-supplied inputs, already validated against the backfill's
+         * declared parameters.
+         *
+         * @var array<string, mixed>
+         */
+        public array $parameters = [],
+        /** Which tenant's cursor this run belongs to. */
+        public ?string $tenant = null,
     ) {}
 }

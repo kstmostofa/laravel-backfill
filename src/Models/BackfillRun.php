@@ -11,6 +11,7 @@ use Kstmostofa\Backfill\Enums\RunStatus;
 /**
  * @property int $id
  * @property string $backfill
+ * @property string|null $tenant
  * @property string $backfill_class
  * @property RunStatus $status
  * @property string|null $cursor

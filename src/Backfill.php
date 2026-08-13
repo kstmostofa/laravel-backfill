@@ -43,6 +43,85 @@ abstract class Backfill
     public bool $withoutModelEvents = false;
 
     /**
+     * Offer this backfill in the operator panel, where support staff can run it
+     * without a developer or a shell.
+     */
+    public bool $operatorRunnable = false;
+
+    /**
+     * Record every processed row in a ledger and skip anything already there.
+     *
+     * Only needed when process() does something the database cannot roll back —
+     * sending an email, calling an API. For a self-excluding collection the
+     * per-batch transaction already makes a redo safe.
+     */
+    public bool $ledger = false;
+
+    /**
+     * Declares that process() reaches outside the database. Combined with a
+     * collection that is not self-excluding and no ledger, this is the setup
+     * where a resume re-sends four million emails, so the runner says so
+     * loudly rather than letting it happen quietly.
+     */
+    public bool $externalSideEffects = false;
+
+    /** @var array<string, mixed> */
+    protected array $parameterValues = [];
+
+    /**
+     * Inputs an operator supplies before the run. Read them with parameter().
+     *
+     * @return array<int, \Kstmostofa\Backfill\Parameters\Parameter>
+     */
+    public function parameters(): array
+    {
+        return [];
+    }
+
+    /**
+     * @param  array<string, mixed>  $values
+     */
+    public function withParameters(array $values): static
+    {
+        $this->parameterValues = $values;
+
+        return $this;
+    }
+
+    public function parameter(string $key, mixed $default = null): mixed
+    {
+        return $this->parameterValues[$key] ?? $default;
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    public function parameterValues(): array
+    {
+        return $this->parameterValues;
+    }
+
+    /**
+     * Tenant identifiers this backfill should run for, each with its own
+     * cursor, or null for a single-tenant backfill.
+     *
+     * @return iterable<int, string|int>|null
+     */
+    public function tenants(): ?iterable
+    {
+        return null;
+    }
+
+    /**
+     * Put the application into the given tenant's context. Called before the
+     * cursor for that tenant is read, so collection() sees the right data.
+     */
+    public function useTenant(string|int $tenant): void
+    {
+        //
+    }
+
+    /**
      * The set of rows to process.
      *
      * Prefer a self-excluding query — one that stops matching a row once that

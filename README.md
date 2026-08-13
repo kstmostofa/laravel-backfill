@@ -108,6 +108,100 @@ Dashboard::auth(fn ($request) => $request->user()?->isAdmin() === true);
 
 The package works fine without Livewire — the dashboard simply does not register.
 
+## The operator panel
+
+The reason teams keep this installed. A developer marks a backfill available and declares what it needs; support staff then run it themselves, from a browser, with no shell and no developer.
+
+```php
+class BackfillOrderRefunds extends Backfill
+{
+    public bool $operatorRunnable = true;
+
+    public function description(): string
+    {
+        return 'Re-issue refund receipts';
+    }
+
+    public function parameters(): array
+    {
+        return [
+            Parameter::ids('order_ids', 'Order IDs')
+                ->required()
+                ->max(50_000)
+                ->help('Paste the ids from the spreadsheet.'),
+
+            Parameter::select('tone', ['formal' => 'Formal', 'friendly' => 'Friendly']),
+        ];
+    }
+
+    public function collection(): Builder
+    {
+        return Order::query()
+            ->whereNull('receipt_sent_at')
+            ->whereIn('id', $this->parameter('order_ids', []));
+    }
+}
+```
+
+The panel lives at its own route with its own gate, because the people who should be pasting order ids into a form are rarely the people who should be able to cancel a run half way through:
+
+```php
+Dashboard::operatorAuth(fn ($request) => $request->user()?->isSupport() === true);
+```
+
+Only backfills marked `$operatorRunnable` appear, only their declared parameters can be set, and every input is validated before a job is queued — a pasted list gets split however the spreadsheet formatted it (commas, newlines, semicolons), de-duplicated, and checked against its ceiling. Progress is described in plain words rather than cursors and batch counts.
+
+Parameters are recorded on the run and re-applied on resume. Trying to resume a paused run with *different* parameters is refused: half the rows processed under one set of inputs and half under another is not a state anyone wants to reason about later.
+
+The same parameters work from the command line:
+
+```bash
+php artisan backfill:run order-refunds --param=order_ids=1,2,3 --param=tone=friendly
+```
+
+## Backfills with external side effects
+
+The per-batch transaction makes a redo safe for database writes — a rolled-back batch never happened. An email does not roll back. For that case, turn on the ledger:
+
+```php
+public bool $ledger = true;
+public bool $externalSideEffects = true;
+```
+
+A row is **claimed** in its own committed transaction before `process()` runs, and **confirmed** afterwards. That ordering is a deliberate trade: a crash between the claim and the work leaves a row unprocessed rather than an email sent twice. Sending nothing is recoverable; sending twice is not.
+
+Rows left claimed-but-unconfirmed are exactly the ones nobody can be sure about, so they are never retried automatically. `backfill:status` reports how many there are so a human can decide.
+
+Setting `$externalSideEffects = true` without a ledger logs a loud warning at the start of every run. That combination — work that escapes the database, with nothing stopping a redo — is the one where a resume re-sends four million emails.
+
+## Multi-tenant backfills
+
+Each tenant gets its own cursor, its own run row and its own lock, so one tenant crashing or pausing never rewinds another.
+
+```php
+public function tenants(): ?iterable
+{
+    return Tenant::query()->pluck('id');
+}
+
+public function useTenant(string|int $tenant): void
+{
+    Tenant::find($tenant)->makeCurrent();
+}
+```
+
+`backfill:run` then walks every tenant in turn and reports each, or `--tenant=acme` runs just one. Because the locks are independent, separate workers can run different tenants side by side.
+
+## Pulse card
+
+With [Laravel Pulse](https://pulse.laravel.com) installed, add the card to your dashboard:
+
+```blade
+<livewire:backfill-pulse-card cols="6" />
+```
+
+It lists runs that are in flight or want attention — failed first, then interrupted, paused, and running — and stays out of Pulse's period filter on purpose: a backfill that has been paused for three days is exactly what you want to see.
+
 ## Events
 
 Every run emits `BackfillStarted`, `BackfillResumed`, `BatchProcessed`, `RowFailed`, `BackfillPaused`, `BackfillCompleted`, `BackfillFailed` and `ThrottleEngaged` under `Kstmostofa\Backfill\Events`.
@@ -216,7 +310,7 @@ BACKFILL_DRIVER=pgsql composer test    # PostgreSQL 13+
 
 Connection details come from `BACKFILL_MYSQL_*` and `BACKFILL_PGSQL_*` environment variables; the defaults match a stock local MySQL and PostgreSQL with a `laravel_backfill_test` database. The chaos tests need the `pcntl` and `posix` extensions and skip themselves if either is missing.
 
-Verified green on all three: **181 tests, 420 assertions** against SQLite, MySQL 8.4 and PostgreSQL 18, with the SIGKILL chaos test running for real on each.
+Verified green on all three: **245 tests, 554 assertions** against SQLite, MySQL 8.4 and PostgreSQL 18, with the SIGKILL chaos test running for real on each.
 
 ### Why the savepoints are not optional
 
@@ -285,6 +379,7 @@ The helper defaults to a batch size of 2 so your tests exercise the real paginat
 | `notifications.slack_webhook` | `null` | Slack incoming webhook URL |
 | `dashboard.enabled` | `false` | Register the Livewire dashboard route |
 | `dashboard.path` / `middleware` | `backfills` / `['web']` | Where it lives and what guards it |
+| `dashboard.operator_path` | `backfills/tasks` | Where the operator panel lives |
 | `record_batches` | `false` | Write one audit row per batch |
 | `prune_runs_after_days` | `90` | Retention for finished runs, via `model:prune` |
 
@@ -304,20 +399,24 @@ The helper defaults to a batch size of 2 so your tests exercise the real paginat
 | `$useTransactions` | Per-batch transaction wrapping. Leave it on |
 | `$hydrateModels` | Set false for the raw query-builder fast path |
 | `$withoutModelEvents` | Suppress observers so they do not fire 8M times |
+| `$operatorRunnable` | Offer this in the operator panel |
+| `parameters(): array` | Inputs an operator supplies; read with `parameter()` |
+| `$ledger` | Record processed rows for work that escapes the database |
+| `$externalSideEffects` | Declares that `process()` reaches outside the database |
+| `tenants(): ?iterable` | Tenant identifiers, each with its own cursor |
+| `useTenant($tenant)` | Switch context before that tenant's rows are read |
+| `description(): string` | Human-readable name, shown in the operator panel |
 
 Integer, UUID and ULID keys all round-trip: the cursor is stored as a string and cast back based on the model's key type.
 
-## Status: v0.3
+## Status: v0.4 — feature complete
 
 Shipped and tested across SQLite, MySQL and PostgreSQL:
 
 - **v0.1** — the class and discovery, the keyset runner, cursor persistence, per-row error isolation, run/status/pause/resume/cancel, the run lock, graceful shutdown
 - **v0.2** — dry run with real diffs and side-effect interception, adaptive throttling on replication lag, `backfill:retry-failed`, statement and lock timeouts, transient-failure retries, the circuit breaker, production guards, and the optional per-batch audit trail
 - **v0.3** — the Livewire dashboard, `--queue` mode with self-chaining jobs, the eight lifecycle events, notifications, and run pruning
-
-Planned:
-
-- **v0.4** — operator panel with declared parameters, ledger mode for external side effects, Pulse card, per-tenant cursors
+- **v0.4** — the operator panel with declared parameters, ledger mode for external side effects, per-tenant cursors, and the Pulse card
 
 ### Known limits
 
@@ -326,6 +425,8 @@ Rows inserted *behind* the cursor after it has passed are not picked up — that
 The dry run intercepts HTTP only through Laravel's client, so a raw cURL call still escapes, and its diff covers the sampled rows rather than every table `process()` might touch. Dry runs are not recorded as runs, so there is no history of who dry-ran what.
 
 Throttling needs a lag signal it can actually read. On PostgreSQL it works from a primary via `pg_stat_replication` or from a replica directly; on MySQL there is no primary-side equivalent, so point `throttle.connection` at a replica or throttling stays inactive.
+
+Ledger mode picks a side. A crash between claiming a row and finishing it leaves that row unprocessed rather than risking a duplicate, so a ledger-backed backfill can quietly skip rows that a non-ledger one would have retried. `backfill:status` surfaces them; nothing retries them for you.
 
 `Backfill::fake()` with `assertCompleted` / `assertProcessed` / `assertNoFailures` is still not shipped — the facade name would collide with the `Backfill` base class, and that is worth resolving deliberately rather than in a rush. Use the `InteractsWithBackfills` trait in the meantime.
 
