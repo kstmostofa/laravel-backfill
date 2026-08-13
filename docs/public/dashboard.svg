@@ -1,0 +1,96 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 880 380" width="880" height="380" font-family="ui-sans-serif, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif">
+  <style>
+    .bg { fill: #f6f7f9; }
+    .panel { fill: #ffffff; stroke: #e3e6ea; }
+    .text { fill: #1b1f24; }
+    .muted { fill: #6b7480; }
+    .track { fill: #eceff2; }
+    .accent { fill: #2f6feb; }
+    .ok { fill: #1a7f37; }
+    .warn { fill: #9a6700; }
+    .bad { fill: #cf222e; }
+    .rule { stroke: #e3e6ea; }
+    .mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+    @media (prefers-color-scheme: dark) {
+      .bg { fill: #0d1117; }
+      .panel { fill: #161b22; stroke: #2a313a; }
+      .text { fill: #e6edf3; }
+      .muted { fill: #9198a1; }
+      .track { fill: #21262d; }
+      .accent { fill: #4c8dff; }
+      .ok { fill: #3fb950; }
+      .warn { fill: #d29922; }
+      .bad { fill: #f85149; }
+      .rule { stroke: #2a313a; }
+    }
+  </style>
+
+  <rect class="bg" width="880" height="380" rx="10"/>
+
+  <text class="text" x="28" y="42" font-size="17" font-weight="700">Backfills</text>
+  <text class="muted" x="28" y="62" font-size="12">One-off data changes, and where each of them got to.</text>
+
+  <rect class="panel" x="20" y="80" width="840" height="180" rx="9" stroke-width="1"/>
+
+  <text class="muted" x="40" y="106" font-size="9.5" letter-spacing="0.6" font-weight="600">BACKFILL</text>
+  <text class="muted" x="250" y="106" font-size="9.5" letter-spacing="0.6" font-weight="600">STATUS</text>
+  <text class="muted" x="390" y="106" font-size="9.5" letter-spacing="0.6" font-weight="600">PROGRESS</text>
+  <text class="muted" x="600" y="106" font-size="9.5" letter-spacing="0.6" font-weight="600">FAILED</text>
+  <text class="muted" x="670" y="106" font-size="9.5" letter-spacing="0.6" font-weight="600">CURSOR</text>
+  <line class="rule" x1="36" y1="116" x2="844" y2="116" stroke-width="1"/>
+
+  <text class="accent" x="40" y="140" font-size="12.5" font-weight="600">user-slugs</text>
+  <rect x="248" y="129" width="62" height="17" rx="8.5" fill="none" stroke="#2f6feb" stroke-width="1"/>
+  <text class="accent" x="258" y="141" font-size="10.5" font-weight="600">Running</text>
+  <rect class="track" x="390" y="134" width="170" height="6" rx="3"/>
+  <rect class="accent" x="390" y="134" width="43" height="6" rx="3"/>
+  <text class="muted mono" x="390" y="155" font-size="10">2,140,000 / 8,412,663</text>
+  <text class="muted" x="600" y="140" font-size="11.5">0</text>
+  <text class="muted mono" x="670" y="140" font-size="10.5">2140317</text>
+  <line class="rule" x1="36" y1="166" x2="844" y2="166" stroke-width="1"/>
+
+  <text class="accent" x="40" y="190" font-size="12.5" font-weight="600">order-receipts</text>
+  <rect x="248" y="179" width="58" height="17" rx="8.5" fill="none" stroke="#9a6700" stroke-width="1"/>
+  <text class="warn" x="257" y="191" font-size="10.5" font-weight="600">Paused</text>
+  <rect class="track" x="390" y="184" width="170" height="6" rx="3"/>
+  <rect class="warn" x="390" y="184" width="139" height="6" rx="3"/>
+  <text class="muted mono" x="390" y="205" font-size="10">684,120 / 840,004</text>
+  <text class="bad" x="600" y="190" font-size="11.5" font-weight="600">213</text>
+  <text class="muted mono" x="670" y="190" font-size="10.5">684120</text>
+  <line class="rule" x1="36" y1="216" x2="844" y2="216" stroke-width="1"/>
+
+  <text class="accent" x="40" y="240" font-size="12.5" font-weight="600">legacy-roles</text>
+  <rect x="248" y="229" width="70" height="17" rx="8.5" fill="none" stroke="#1a7f37" stroke-width="1"/>
+  <text class="ok" x="256" y="241" font-size="10.5" font-weight="600">Completed</text>
+  <rect class="track" x="390" y="234" width="170" height="6" rx="3"/>
+  <rect class="ok" x="390" y="234" width="170" height="6" rx="3"/>
+  <text class="muted mono" x="390" y="255" font-size="10">1,204,551 / 1,204,551</text>
+  <text class="muted" x="600" y="240" font-size="11.5">0</text>
+  <text class="muted mono" x="670" y="240" font-size="10.5">1204551</text>
+
+  <rect class="panel" x="20" y="276" width="840" height="86" rx="9" stroke-width="1"/>
+  <text class="muted" x="40" y="300" font-size="9.5" letter-spacing="0.6" font-weight="600">BATCH DURATION — LAST 40 BATCHES</text>
+
+  <g class="accent" opacity="0.75">
+    <rect x="40" y="330" width="14" height="18" rx="1"/>
+    <rect x="59" y="326" width="14" height="22" rx="1"/>
+    <rect x="78" y="332" width="14" height="16" rx="1"/>
+    <rect x="97" y="322" width="14" height="26" rx="1"/>
+    <rect x="116" y="329" width="14" height="19" rx="1"/>
+    <rect x="135" y="316" width="14" height="32" rx="1"/>
+    <rect x="154" y="331" width="14" height="17" rx="1"/>
+    <rect x="173" y="325" width="14" height="23" rx="1"/>
+    <rect x="192" y="311" width="14" height="37" rx="1"/>
+    <rect x="211" y="328" width="14" height="20" rx="1"/>
+    <rect x="230" y="333" width="14" height="15" rx="1"/>
+    <rect x="249" y="320" width="14" height="28" rx="1"/>
+    <rect x="268" y="327" width="14" height="21" rx="1"/>
+    <rect x="287" y="318" width="14" height="30" rx="1"/>
+    <rect x="306" y="331" width="14" height="17" rx="1"/>
+    <rect x="325" y="324" width="14" height="24" rx="1"/>
+    <rect x="344" y="329" width="14" height="19" rx="1"/>
+    <rect x="363" y="313" width="14" height="35" rx="1"/>
+    <rect x="382" y="330" width="14" height="18" rx="1"/>
+    <rect x="401" y="326" width="14" height="22" rx="1"/>
+  </g>
+</svg>

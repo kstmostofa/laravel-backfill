@@ -10,6 +10,8 @@ This package is built around one invariant:
 
 Every design decision in here is downstream of that sentence.
 
+📖 **[Full documentation](https://kstmostofa.github.io/laravel-backfill/)** — this README is the tour; the docs go into why each guarantee holds and where it does not.
+
 ## Installation
 
 ```bash
