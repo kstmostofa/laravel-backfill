@@ -63,15 +63,48 @@ Make `collection()` **self-excluding** — once a row has been processed it shou
 ## Running it
 
 ```bash
-php artisan backfill:list                  # discovered backfills + last run status
-php artisan backfill:run user-slugs        # resumable execution
-php artisan backfill:status user-slugs     # progress, throughput, failed rows
-php artisan backfill:pause user-slugs      # stop cleanly after the current batch
-php artisan backfill:resume user-slugs     # continue from the committed cursor
-php artisan backfill:cancel user-slugs     # stop for good; will not resume
+php artisan backfill:list                       # discovered backfills + last run status
+php artisan backfill:run user-slugs --dry-run   # scope, index check, real diffs, zero writes
+php artisan backfill:run user-slugs             # resumable execution
+php artisan backfill:status user-slugs          # progress, throughput, failed rows
+php artisan backfill:pause user-slugs           # stop cleanly after the current batch
+php artisan backfill:resume user-slugs          # continue from the committed cursor
+php artisan backfill:cancel user-slugs          # stop for good; will not resume
+php artisan backfill:retry-failed user-slugs    # re-process only the rows that failed
 ```
 
-Useful flags on `backfill:run`: `--fresh` (ignore a resumable run), `--batch-size=`, `--sleep=`, `--max-batches=` (stop cleanly after N batches), `--no-count` (skip the up-front estimate on tables too big to count), `--force` (skip the production confirmation in CI).
+Useful flags on `backfill:run`: `--dry-run` and `--samples=`, `--fresh` (ignore a resumable run), `--batch-size=`, `--sleep=`, `--max-batches=` (stop cleanly after N batches), `--no-count` (skip the up-front estimate on tables too big to count), `--force` (skip the production guards and confirmation).
+
+## The dry run
+
+`--dry-run` is the command to reach for before any real run. It answers the four questions worth asking, and writes nothing:
+
+```
+  Dry run: user-slugs — nothing was written.
+
+  Rows matching ........................................... 8,412,663
+  Batch size .................................................. 1,000
+  Index ....................... indexed — Walks index PRIMARY (type=range), no sort.
+  Estimated duration ........................................... ~4.2h
+
+  Sampled 5 rows, rolled back:
+
+  +------+----------------------------------------------------+
+  | Row  | What would change                                  |
+  +------+----------------------------------------------------+
+  | 1041 | slug: null → ada-lovelace, updated_at: … → …       |
+  | 1042 | slug: null → alan-turing, updated_at: … → …        |
+  +------+----------------------------------------------------+
+
+  Side effects intercepted (these would have escaped in a real run):
+  mail ................. 5 across 5 rows — roughly 8,412,663 in full
+```
+
+The diffs are real: those five rows are genuinely processed, inside a transaction that is then rolled back. A dry run that only prints the query tells you nothing about whether `process()` does what you think it does.
+
+Everything with no rollback is intercepted before it happens — mail, notifications, queued and dispatched jobs, and HTTP calls made through Laravel's client. Application events are *recorded but not suppressed*, deliberately: faking them would stop model observers running, and the diff would then show something a real run would never produce.
+
+Two limits worth knowing. HTTP interception only covers Laravel's HTTP client, so a raw cURL call in `process()` still escapes. And the diff covers the sampled rows themselves — if `process()` also writes to another table, the rollback still protects you, but the change will not appear in the table above.
 
 ## What it actually does for you
 
@@ -86,6 +119,16 @@ Useful flags on `backfill:run`: `--fresh` (ignore a resumable run), `--batch-siz
 **Graceful shutdown.** SIGTERM and SIGINT are trapped: the batch in flight finishes, commits its cursor, and the run is marked `paused` so `backfill:resume` picks it straight back up.
 
 **No double-runs.** A row in `backfill_locks` is the run lock, acquired with an insert against a unique index — identical guarantees on MySQL, PostgreSQL and SQLite, unlike a partial unique index, which MySQL does not have. A second attempt is told who holds it and since when. A lock abandoned by a killed process goes stale with its heartbeat and is taken over automatically.
+
+**A busy database is retried; a bug is not.** Deadlocks, lock timeouts and dropped connections leave the batch rolled back cleanly, so the batch is retried with exponential backoff. Everything else fails the run immediately — a missing column will fail identically forever, and retrying it only holds locks longer to reach the same error.
+
+**Statement and lock timeouts.** Set `backfill.timeouts` and the runner bounds how long any single statement, or any wait for a lock, may take. A blocked batch then fails fast and is retried instead of holding its own locks while it waits. (On MySQL, `max_execution_time` only constrains reads, so the lock timeout is what protects a blocked write.)
+
+**A circuit breaker for systemic failure.** A few bad rows are normal. Most rows failing means a bad assumption, and the run auto-pauses rather than burning through eight million rows recording the same error. The rate is only judged once enough rows have been attempted to mean anything, and it counts the current session only — so a run that tripped, got fixed, and was resumed is judged on what happens next, not on the failures that prompted the fix.
+
+**Adaptive throttling.** With `backfill.throttle.enabled`, the runner watches replication lag. Under the soft threshold it runs at full speed; between soft and hard it slows down proportionally and halves the batch; above hard it stops issuing batches until the replicas recover, and pauses the run if they have not within `lag_timeout`. It also backs off when a batch suddenly takes far longer than the rolling median, which catches contention that lag does not show. An unreadable lag signal — a missing `REPLICATION CLIENT` grant, say — counts as healthy, because stalling a backfill over a missing permission is worse than not throttling.
+
+**Production guards.** A run larger than `max_rows_without_confirmation` is refused without `--force`, and so is a run started inside a configured deploy-freeze window. Every run records who started it.
 
 ## The chaos test
 
@@ -119,7 +162,7 @@ BACKFILL_DRIVER=pgsql composer test    # PostgreSQL 13+
 
 Connection details come from `BACKFILL_MYSQL_*` and `BACKFILL_PGSQL_*` environment variables; the defaults match a stock local MySQL and PostgreSQL with a `laravel_backfill_test` database. The chaos tests need the `pcntl` and `posix` extensions and skip themselves if either is missing.
 
-Verified green on all three: **60 tests, 172 assertions** against SQLite, MySQL 8.4 and PostgreSQL 18, with the SIGKILL chaos test running for real on each.
+Verified green on all three: **140 tests, 348 assertions** against SQLite, MySQL 8.4 and PostgreSQL 18, with the SIGKILL chaos test running for real on each.
 
 ### Why the savepoints are not optional
 
@@ -152,9 +195,7 @@ it('slugs every user', function () {
 });
 ```
 
-The helper defaults to a batch size of 2 so your tests exercise the real pagination path, rather than a single batch that would hide ordering and cursor bugs. Pass `['batchSize' => n]` to override it, along with any other run option (`maxBatches`, `fresh`, `withoutEstimate`).
-
-`Backfill::fake()` with `assertCompleted` / `assertProcessed` / `assertNoFailures` is planned but not in v0.1 — the facade name would currently collide with the `Backfill` base class, and that is worth resolving deliberately rather than in a rush.
+The helper defaults to a batch size of 2 so your tests exercise the real pagination path, rather than a single batch that would hide ordering and cursor bugs. Pass `['batchSize' => n]` to override it, along with any other run option (`maxBatches`, `fresh`, `withoutEstimate`, `force`).
 
 ## Configuration
 
@@ -167,6 +208,24 @@ The helper defaults to a batch size of 2 so your tests exercise the real paginat
 | `batch_size` | `1000` | Default rows per batch; the class property wins |
 | `sleep_ms` | `0` | Default pause between batches; the class property wins |
 | `stale_after` | `120` | Seconds without a heartbeat before a run counts as crashed and can be resumed |
+| `timeouts.statement` | `null` | Milliseconds before a single statement is killed |
+| `timeouts.lock` | `null` | Milliseconds to wait for a lock before giving up |
+| `retry.max_batch_retries` | `3` | Retries for a batch that failed transiently |
+| `retry.base_delay_ms` | `250` | First backoff delay; doubles each retry |
+| `circuit_breaker.enabled` | `true` | Auto-pause when failures look systemic |
+| `circuit_breaker.max_failure_rate` | `0.25` | Session failure rate that trips it |
+| `circuit_breaker.min_sample` | `50` | Rows attempted before the rate is judged |
+| `throttle.enabled` | `false` | Watch replication lag and back off |
+| `throttle.connection` | `null` | Replica connection to measure lag on |
+| `throttle.lag_soft` / `lag_hard` | `5` / `30` | Seconds of lag to slow down at, then stop at |
+| `throttle.lag_timeout` | `600` | Seconds to wait for recovery before pausing |
+| `throttle.min_batch_size` | `50` | Floor the throttle will not shrink past |
+| `throttle.slow_batch_multiplier` | `5` | Back off when a batch exceeds this × the median |
+| `dry_run.samples` | `5` | Rows processed and rolled back during `--dry-run` |
+| `guards.max_rows_without_confirmation` | `1000000` | Refuse a bigger run without `--force` |
+| `guards.deploy_freeze` | disabled | Windows during which runs are refused |
+| `record_batches` | `false` | Write one audit row per batch |
+| `prune_runs_after_days` | `90` | Retention for finished runs |
 
 ## Backfill API
 
@@ -187,21 +246,27 @@ The helper defaults to a batch size of 2 so your tests exercise the real paginat
 
 Integer, UUID and ULID keys all round-trip: the cursor is stored as a string and cast back based on the model's key type.
 
-## Status: v0.1
+## Status: v0.2
 
-This is the MVP. Shipped and tested: the class and discovery, the keyset runner, cursor persistence, per-row error isolation, run/status/pause/resume/cancel, the run lock, and graceful shutdown.
+Shipped and tested across SQLite, MySQL and PostgreSQL:
+
+- **v0.1** — the class and discovery, the keyset runner, cursor persistence, per-row error isolation, run/status/pause/resume/cancel, the run lock, graceful shutdown
+- **v0.2** — dry run with real diffs and side-effect interception, adaptive throttling on replication lag, `backfill:retry-failed`, statement and lock timeouts, transient-failure retries, the circuit breaker, production guards, and the optional per-batch audit trail
 
 Planned:
 
-- **v0.2** — dry-run with real before/after diffs and side-effect faking, adaptive throttling on replication lag, `backfill:retry-failed`, explicit statement and lock timeouts, production guardrails
 - **v0.3** — Livewire dashboard, `--queue` mode, events, notifications
 - **v0.4** — operator panel with declared parameters, ledger mode for external side effects, Pulse card, per-tenant cursors
 
-### Known limits in v0.1
+### Known limits
 
 Rows inserted *behind* the cursor after it has passed are not picked up — that is inherent to keyset pagination, and a second run afterwards catches them. `backfill:status` does not yet report how many such rows exist.
 
-`--dry-run` is deliberately absent rather than half-built: a dry run that does not fake mail, notifications, queued jobs, events and HTTP is not actually safe, and that work belongs to v0.2.
+The dry run intercepts HTTP only through Laravel's client, so a raw cURL call still escapes, and its diff covers the sampled rows rather than every table `process()` might touch. Dry runs are not recorded as runs, so there is no history of who dry-ran what.
+
+Throttling needs a lag signal it can actually read. On PostgreSQL it works from a primary via `pg_stat_replication` or from a replica directly; on MySQL there is no primary-side equivalent, so point `throttle.connection` at a replica or throttling stays inactive.
+
+`Backfill::fake()` with `assertCompleted` / `assertProcessed` / `assertNoFailures` is still not shipped — the facade name would collide with the `Backfill` base class, and that is worth resolving deliberately rather than in a rush. Use the `InteractsWithBackfills` trait in the meantime.
 
 ## License
 

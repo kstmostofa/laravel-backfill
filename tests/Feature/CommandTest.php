@@ -83,6 +83,26 @@ it('cancels a backfill so it will not resume', function () {
     expect(BackfillRun::count())->toBe(2);
 });
 
+it('dry-runs from the command line without writing', function () {
+    User::seedUnslugged(8);
+
+    $this->artisan('backfill:run', ['name' => 'user-slugs', '--dry-run' => true])
+        ->expectsOutputToContain('nothing was written')
+        ->assertSuccessful();
+
+    expect(User::whereNull('slug')->count())->toBe(8)
+        ->and(BackfillRun::count())->toBe(0);
+});
+
+it('shows the scope and sampled diffs in a dry run', function () {
+    User::seedUnslugged(8);
+
+    $this->artisan('backfill:run', ['name' => 'user-slugs', '--dry-run' => true, '--samples' => 2])
+        ->expectsOutputToContain('Rows matching')
+        ->expectsOutputToContain('user-1')
+        ->assertSuccessful();
+});
+
 it('generates a backfill class', function () {
     $path = base_path('app/Backfills/BackfillOrderTotals.php');
     config()->set('backfill.path', base_path('app/Backfills'));

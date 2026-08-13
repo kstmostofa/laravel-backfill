@@ -20,4 +20,25 @@ class BackfillRefused extends RuntimeException
     {
         return new static("Backfill [{$name}] refused to start: guard() returned false.");
     }
+
+    public static function tooManyRows(string $name, int $estimate, int $ceiling): static
+    {
+        return new static(sprintf(
+            'Backfill [%s] matches %s rows, above the %s row ceiling set by '
+            .'backfill.guards.max_rows_without_confirmation. Dry-run it first with '
+            .'`backfill:run %s --dry-run`, then pass --force if the number is expected.',
+            $name,
+            number_format($estimate),
+            number_format($ceiling),
+            $name,
+        ));
+    }
+
+    public static function duringFreeze(string $name, string $window): static
+    {
+        return new static(
+            "Backfill [{$name}] cannot start during the deploy freeze window {$window}. "
+            .'Wait for the window to close, or pass --force if this is the emergency it exists for.'
+        );
+    }
 }
