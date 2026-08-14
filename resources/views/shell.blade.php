@@ -46,14 +46,14 @@
         }
 
         :root[data-theme="dark"] {
-            --brand: #ff6152;
-            --brand-2: #ff9166;
-            --brand-strong: #ff2d20;
-            --brand-soft: rgba(255, 97, 82, .13);
-            --brand-ring: rgba(255, 97, 82, .26);
+            --brand: #ff2d20;
+            --brand-2: #ff6a3d;
+            --brand-strong: #ff5647;
+            --brand-soft: rgba(255, 45, 32, .16);
+            --brand-ring: rgba(255, 45, 32, .30);
 
             --bg: #0a0c0f;
-            --bg-accent: radial-gradient(1200px 400px at 50% -120px, rgba(255, 97, 82, .10), transparent 70%);
+            --bg-accent: radial-gradient(1200px 400px at 50% -120px, rgba(255, 45, 32, .13), transparent 70%);
             --surface: #131720;
             --surface-2: #171c26;
             --border: #232936;
@@ -76,13 +76,13 @@
 
         @media (prefers-color-scheme: dark) {
             :root[data-theme="auto"] {
-                --brand: #ff6152;
-                --brand-2: #ff9166;
-                --brand-strong: #ff2d20;
-                --brand-soft: rgba(255, 97, 82, .13);
-                --brand-ring: rgba(255, 97, 82, .26);
+                --brand: #ff2d20;
+                --brand-2: #ff6a3d;
+                --brand-strong: #ff5647;
+                --brand-soft: rgba(255, 45, 32, .16);
+                --brand-ring: rgba(255, 45, 32, .30);
                 --bg: #0a0c0f;
-                --bg-accent: radial-gradient(1200px 400px at 50% -120px, rgba(255, 97, 82, .10), transparent 70%);
+                --bg-accent: radial-gradient(1200px 400px at 50% -120px, rgba(255, 45, 32, .13), transparent 70%);
                 --surface: #131720;
                 --surface-2: #171c26;
                 --border: #232936;
@@ -539,7 +539,9 @@
             display: inline-flex;
             align-items: center;
             gap: 6px;
-            padding: 7px 13px;
+            padding: 5px 11px;
+            font-size: 13.5px;
+            line-height: 1.45;
             border-radius: var(--r-sm);
             border: 1px solid var(--border-strong);
             background: var(--surface);
@@ -667,13 +669,12 @@
             display: grid;
             background: var(--surface);
             grid-template-columns: repeat(auto-fit, minmax(146px, 1fr));
-            border-bottom: 1px solid var(--border);
         }
 
         .stat {
             padding: 16px 20px;
             border-right: 1px solid var(--border);
-            border-top: 1px solid var(--border);
+            border-bottom: 1px solid var(--border);
         }
 
         .stat .label {
