@@ -26,7 +26,7 @@
     @if ($this->available->isEmpty())
         <div class="panel">
             <div class="empty">
-                <x-backfill::icon name="empty" :size="34" />
+                <div class="ring"><x-backfill::icon name="empty" :size="26" /></div>
                 <p>There are no tasks available to you.</p>
                 <p class="muted">
                     A developer makes one available by setting
@@ -37,7 +37,7 @@
     @else
         <div class="panel">
             <div class="panel-head">
-                <span class="badge badge-running" style="width:22px;height:22px;padding:0;justify-content:center">1</span>
+                <span class="step">1</span>
                 <h2>Choose a task</h2>
             </div>
             <div class="scroll">
@@ -46,13 +46,8 @@
                         @foreach ($this->available as $backfill)
                             <tr wire:key="task-{{ $backfill->name() }}">
                                 <td>
-                                    <div class="name-cell">
-                                        <span class="dot"><x-backfill::icon name="bolt" :size="16" /></span>
-                                        <span>
-                                            <strong>{{ $backfill->description() ?: $backfill->name() }}</strong>
-                                            <code>{{ $backfill->name() }}</code>
-                                        </span>
-                                    </div>
+                                    <div class="row-name">{{ $backfill->description() ?: $backfill->name() }}</div>
+                                    <code style="display:block; margin-top:2px">{{ $backfill->name() }}</code>
                                 </td>
                                 <td class="right">
                                     @if ($selected === $backfill->name())
@@ -74,7 +69,7 @@
     @if ($this->backfill)
         <div class="panel">
             <div class="panel-head">
-                <span class="badge badge-running" style="width:22px;height:22px;padding:0;justify-content:center">2</span>
+                <span class="step">2</span>
                 <h2>{{ $this->backfill->description() ?: $this->backfill->name() }}</h2>
                 <span class="spacer"></span>
                 <button class="icon-only" wire:click="select(null)" title="Close">
@@ -138,7 +133,7 @@
         @php($status = $run->status->value)
         <div class="panel">
             <div class="panel-head">
-                <span class="badge badge-running" style="width:22px;height:22px;padding:0;justify-content:center">3</span>
+                <span class="step">3</span>
                 <h2>Progress</h2>
                 <span class="spacer"></span>
                 <span class="badge badge-{{ $status }}">

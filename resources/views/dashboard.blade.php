@@ -4,6 +4,33 @@
         <p>One-off data changes, and where each of them got to.</p>
     </div>
 
+    @php($summary = $this->summary)
+    <div class="kpis">
+        <div class="kpi">
+            <div class="kpi-label"><x-backfill::icon name="list" :size="13" /> Backfills</div>
+            <div class="kpi-value">{{ number_format($summary['total']) }}</div>
+        </div>
+        <div class="kpi @if($summary['running']) is-live @endif">
+            <div class="kpi-label">
+                @if ($summary['running'])
+                    <span class="pulse" style="color: var(--brand)"></span>
+                @else
+                    <x-backfill::icon name="play" :size="13" />
+                @endif
+                Running now
+            </div>
+            <div class="kpi-value">{{ number_format($summary['running']) }}</div>
+        </div>
+        <div class="kpi ok">
+            <div class="kpi-label"><x-backfill::icon name="check" :size="13" /> Rows processed</div>
+            <div class="kpi-value">{{ number_format($summary['processed']) }}</div>
+        </div>
+        <div class="kpi @if($summary['failed']) bad @endif">
+            <div class="kpi-label"><x-backfill::icon name="error" :size="13" /> Rows failed</div>
+            <div class="kpi-value">{{ number_format($summary['failed']) }}</div>
+        </div>
+    </div>
+
     @if ($flash)
         <div class="note note-ok">
             <x-backfill::icon name="check" />
@@ -123,7 +150,7 @@
                         <tr>
                             <td colspan="6">
                                 <div class="empty">
-                                    <x-backfill::icon name="empty" :size="34" />
+                                    <div class="ring"><x-backfill::icon name="empty" :size="26" /></div>
                                     <p>No backfills found in <code>{{ config('backfill.path') }}</code>.</p>
                                     <p class="muted">Create one with <code>php artisan make:backfill BackfillUserSlugs</code></p>
                                 </div>

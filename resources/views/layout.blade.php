@@ -3,5 +3,5 @@
 @section('title', 'Backfills')
 
 @section('body')
-    @livewire('backfill-dashboard')
+    @livewire('backfill-dashboard', ['selected' => request('selected')])
 @endsection

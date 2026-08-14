@@ -255,6 +255,24 @@ class BackfillDashboard extends Component
     }
 
     /**
+     * The four numbers worth seeing before reading any rows.
+     *
+     * @return array<string, int>
+     */
+    public function getSummaryProperty(): array
+    {
+        $rows = $this->rows;
+        $runs = $rows->pluck('run')->filter();
+
+        return [
+            'total' => $rows->count(),
+            'running' => $runs->where('status', RunStatus::Running)->count(),
+            'processed' => (int) $runs->sum('processed_count'),
+            'failed' => (int) $runs->sum('failed_count'),
+        ];
+    }
+
+    /**
      * @return Collection<int, BackfillRunError>
      */
     public function getErrorsProperty(): Collection
