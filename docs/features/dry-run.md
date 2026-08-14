@@ -51,7 +51,23 @@ PostgreSQL sensibly chooses a sequential scan and a sort on tiny tables no matte
 
 ## Roughly how long
 
-The sampled rows are timed and extrapolated across the full scope. It is deliberately rough — it exists to tell apart "ten minutes" from "three days", not to be accurate to the minute. Real runs sleep between batches and slow down under [throttling](/safety/throttling).
+The sample is timed and extrapolated across the full scope. It is deliberately rough — it exists to tell apart "ten minutes" from "three days", not to be accurate to the minute. Real runs also sleep between batches and slow down under [throttling](/safety/throttling), neither of which the estimate knows about.
+
+Two things make the number honest rather than decorative, both learned from being badly wrong against a real 8M-row table:
+
+**The two paths scale differently.** `process()` costs per row, so its sample scales by row count. A whole `processBatch()` costs about the same whether it touches three rows or five thousand, so scaling *that* by row count is meaningless — it once reported `~1.8h` for a job that took 75 seconds. On the un-hydrated path the dry run therefore times one **full batch** and multiplies by the batch count, showing you only the first few diffs.
+
+**The first row is discarded as warm-up.** It pays for connection setup, query compilation and booting the model — costs the other eight million rows never see. With the default five-row sample that one row was most of the measurement, which turned a three-minute job into an advertised half hour.
+
+The estimate still improves with a bigger sample, because per-row noise averages out:
+
+| `--samples` | Estimate | Actual |
+| --- | --- | --- |
+| 5 (default) | ~5m | ~3.6m |
+| 50 | ~4m | ~3.6m |
+| 500 | ~3m | ~3.6m |
+
+If you are deciding something expensive on the basis of the number, pass `--samples=200` and trust it more.
 
 ## What would actually change
 

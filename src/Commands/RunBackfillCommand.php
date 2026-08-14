@@ -281,7 +281,13 @@ class RunBackfillCommand extends Command
             return;
         }
 
-        $this->components->info(sprintf('Sampled %d rows, rolled back:', count($report->samples)));
+        $this->components->info($report->perRow
+            ? sprintf('Sampled %d rows, rolled back:', count($report->samples))
+            : sprintf(
+                'Timed one batch of %s rows, rolled back — showing the first %d:',
+                number_format($report->timedRows),
+                count($report->samples),
+            ));
 
         $this->table(
             ['Row', 'What would change'],

@@ -33,7 +33,17 @@ class DryRunner
         $key = $backfill->keyName();
 
         $scope = $this->scope($backfill);
-        $rows = $this->sampleRows($backfill, $key, $samples);
+
+        // On the un-hydrated path the cost is per batch, not per row: one bulk
+        // UPDATE costs about the same whether it touches three rows or five
+        // thousand. Timing three rows and multiplying by the row count reads
+        // "1.8 hours" for a job that takes 75 seconds, so sample a whole batch
+        // and scale by batch count instead.
+        $timedRows = $backfill->hydrateModels
+            ? $samples
+            : max($samples, $backfill->resolvedBatchSize());
+
+        $rows = $this->sampleRows($backfill, $key, $timedRows);
 
         // Explain the query the runner actually issues, cursor predicate and
         // all — without it the plan describes a query that never runs.
@@ -44,10 +54,11 @@ class DryRunner
 
         $diffs = [];
         $elapsed = 0.0;
+        $timed = 0;
 
         try {
             if ($rows->isNotEmpty()) {
-                [$diffs, $elapsed] = $this->processInRolledBackTransaction($backfill, $rows, $key);
+                [$diffs, $elapsed, $timed] = $this->processInRolledBackTransaction($backfill, $rows, $key);
             }
 
             $sideEffects = $recorder->collect();
@@ -60,11 +71,15 @@ class DryRunner
             backfill: $backfill->name(),
             scope: $scope,
             plan: $plan,
-            samples: $diffs,
+            // A whole batch was timed, but nobody wants five thousand diffs
+            // printed at them.
+            samples: array_slice($diffs, 0, $samples),
             sampleSeconds: $elapsed,
             sideEffects: $sideEffects ?? [],
             events: $events ?? [],
             batchSize: $backfill->resolvedBatchSize(),
+            perRow: $backfill->hydrateModels,
+            timedRows: $timed,
         );
     }
 
@@ -81,21 +96,26 @@ class DryRunner
     }
 
     /**
-     * @return array{0: array<int, SampleDiff>, 1: float}
+     * @return array{0: array<int, SampleDiff>, 1: float, 2: int}
      */
     protected function processInRolledBackTransaction(Backfill $backfill, Collection $rows, string $key): array
     {
         $diffs = [];
-        $startedAt = microtime(true);
         $elapsed = 0.0;
+        $timed = 0;
 
         try {
-            $this->connection()->transaction(function () use ($backfill, $rows, $key, &$diffs, $startedAt, &$elapsed) {
-                $diffs = $backfill->hydrateModels
+            $this->connection()->transaction(function () use ($backfill, $rows, $key, &$diffs, &$elapsed, &$timed) {
+                $work = fn () => $backfill->hydrateModels
                     ? $this->processRows($backfill, $rows, $key)
                     : $this->processWholeBatch($backfill, $rows, $key);
 
-                $elapsed = microtime(true) - $startedAt;
+                // Mirror the real run. Without this, observers fire during the
+                // dry run but not during the run it is predicting, and the diff
+                // shows changes that would never actually happen.
+                [$diffs, $elapsed, $timed] = $backfill->withoutModelEvents
+                    ? Model::withoutEvents($work)
+                    : $work();
 
                 // Nothing here is allowed to survive. Throwing is the only way
                 // to guarantee the rollback even if the work committed
@@ -106,15 +126,20 @@ class DryRunner
             // Expected: this is how the dry run stays dry.
         }
 
-        return [$diffs, $elapsed];
+        return [$diffs, $elapsed, $timed];
     }
 
     /**
-     * @return array<int, SampleDiff>
+     * Only the process() calls are timed. Capturing the "after" state costs an
+     * extra SELECT per row that a real run never issues, and counting it would
+     * make every estimate roughly twice what the job actually takes.
+     *
+     * @return array{0: array<int, SampleDiff>, 1: float}
      */
     protected function processRows(Backfill $backfill, Collection $rows, string $key): array
     {
         $diffs = [];
+        $timings = [];
 
         foreach ($rows as $record) {
             $id = (string) ($record->{$key} ?? '');
@@ -126,7 +151,9 @@ class DryRunner
             $before = $record instanceof Model ? $record->getRawOriginal() : (array) $record;
 
             try {
+                $startedAt = microtime(true);
                 $backfill->process($record);
+                $timings[] = microtime(true) - $startedAt;
             } catch (Throwable $e) {
                 $diffs[] = new SampleDiff($id, [], $e->getMessage());
 
@@ -140,7 +167,15 @@ class DryRunner
                 : new SampleDiff($id, $this->diff($before, $after));
         }
 
-        return $diffs;
+        // The first row pays for connection warm-up, query compilation and
+        // booting the model — costs the other 8 million rows never see. With a
+        // five-row sample that one row is most of the measurement, which is how
+        // a three-minute job came to be advertised as half an hour.
+        if (count($timings) >= 3) {
+            array_shift($timings);
+        }
+
+        return [$diffs, array_sum($timings), count($timings)];
     }
 
     /**
@@ -152,22 +187,32 @@ class DryRunner
         $before = $this->rawState($backfill, $key, $ids);
 
         try {
+            // As above, only the work itself is timed — the before/after reads
+            // are the dry run's own overhead, not the job's.
+            $startedAt = microtime(true);
             $backfill->processBatch($rows);
+            $elapsed = microtime(true) - $startedAt;
         } catch (Throwable $e) {
-            return collect($ids)
-                ->map(fn ($id) => new SampleDiff((string) $id, [], $e->getMessage()))
-                ->all();
+            return [
+                collect($ids)
+                    ->map(fn ($id) => new SampleDiff((string) $id, [], $e->getMessage()))
+                    ->all(),
+                0.0,
+                0,
+            ];
         }
 
         $after = $this->rawState($backfill, $key, $ids);
 
-        return collect($ids)->map(function ($id) use ($before, $after) {
+        $diffs = collect($ids)->map(function ($id) use ($before, $after) {
             $key = (string) $id;
 
             return isset($after[$key])
                 ? new SampleDiff($key, $this->diff($before[$key] ?? [], $after[$key]))
                 : new SampleDiff($key, [], null, true);
         })->all();
+
+        return [$diffs, $elapsed, count($ids)];
     }
 
     /**

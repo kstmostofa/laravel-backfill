@@ -18,21 +18,35 @@ class DryRunReport
         public readonly array $sideEffects = [],
         public readonly array $events = [],
         public readonly int $batchSize = 0,
+        /** True when process() ran per row; false on the processBatch() path. */
+        public readonly bool $perRow = true,
+        /** How many rows were actually timed, which may exceed those shown. */
+        public readonly int $timedRows = 0,
     ) {}
 
     /**
-     * Extrapolate the sampled rows out to the full scope. Deliberately rough —
+     * Extrapolate the timed sample out to the full scope. Deliberately rough —
      * it is there to tell apart "ten minutes" from "three days".
+     *
+     * The two paths scale differently, and treating them the same is what made
+     * an earlier version report 1.8 hours for a job that took 75 seconds.
+     * process() costs per row, so its sample scales by row count. A whole
+     * processBatch() costs about the same regardless of how many rows it
+     * touches, so its sample scales by batch count.
      */
     public function estimatedSeconds(): ?float
     {
-        $sampled = count($this->samples);
-
-        if ($this->scope === null || $sampled === 0 || $this->sampleSeconds <= 0) {
+        if ($this->scope === null || $this->sampleSeconds <= 0) {
             return null;
         }
 
-        return ($this->sampleSeconds / $sampled) * $this->scope;
+        if (! $this->perRow) {
+            return $this->sampleSeconds * max(1, ceil($this->scope / max(1, $this->batchSize)));
+        }
+
+        $timed = $this->timedRows ?: count($this->samples);
+
+        return $timed === 0 ? null : ($this->sampleSeconds / $timed) * $this->scope;
     }
 
     public function estimatedDuration(): ?string

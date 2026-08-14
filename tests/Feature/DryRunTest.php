@@ -5,6 +5,8 @@ use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Mail;
 use Kstmostofa\Backfill\Backfill;
 use Kstmostofa\Backfill\DryRun\DryRunner;
+use Kstmostofa\Backfill\DryRun\DryRunReport;
+use Kstmostofa\Backfill\DryRun\QueryPlan;
 use Kstmostofa\Backfill\Models\BackfillRun;
 use Kstmostofa\Backfill\Tests\Fixtures\Backfills\BackfillUserSlugs;
 use Kstmostofa\Backfill\Tests\Fixtures\Backfills\BackfillWithFailingRow;
@@ -98,6 +100,55 @@ it('estimates how long the whole thing would take', function () {
 
     expect($report->estimatedSeconds())->toBeGreaterThan(0)
         ->and($report->estimatedDuration())->toBeString();
+});
+
+it('times a whole batch on the un-hydrated path', function () {
+    User::seedUnslugged(10);
+
+    // batchSize is 2 on this fixture, so a full batch is timed even though
+    // only the requested diffs are shown.
+    $report = dryRun(BackfillWithoutHydration::class, 1);
+
+    expect($report->perRow)->toBeFalse()
+        ->and($report->timedRows)->toBe(2)
+        ->and($report->samples)->toHaveCount(1);
+});
+
+/**
+ * A processBatch() costs about the same whether it touches three rows or five
+ * thousand, so scaling its sample by row count is meaningless. Doing that
+ * reported 1.8 hours for an 8M-row job that actually took 75 seconds.
+ */
+it('scales the batch-path estimate by batches, not by rows', function () {
+    $report = new DryRunReport(
+        backfill: 'x',
+        scope: 8_000_000,
+        plan: QueryPlan::unknown(),
+        samples: [],
+        sampleSeconds: 0.05,      // one batch took 50ms
+        batchSize: 5_000,
+        perRow: false,
+        timedRows: 5_000,
+    );
+
+    // 1,600 batches x 50ms = 80s. Scaling per row would have said 400,000s.
+    expect($report->estimatedSeconds())->toBe(80.0)
+        ->and($report->estimatedDuration())->toBe('~1m');
+});
+
+it('still scales the per-row estimate by rows', function () {
+    $report = new DryRunReport(
+        backfill: 'x',
+        scope: 1_000_000,
+        plan: QueryPlan::unknown(),
+        samples: [],
+        sampleSeconds: 0.01,      // 5 rows took 10ms
+        batchSize: 1_000,
+        perRow: true,
+        timedRows: 5,
+    );
+
+    expect($report->estimatedSeconds())->toBe(2000.0);
 });
 
 it('produces a readable query plan', function () {
