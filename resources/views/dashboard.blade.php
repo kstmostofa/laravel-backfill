@@ -1,24 +1,35 @@
 <div wire:poll.3s>
-    <h1>Backfills</h1>
-    <p class="sub">One-off data changes, and where each of them got to.</p>
+    <div class="page-head">
+        <h1>Backfills</h1>
+        <p>One-off data changes, and where each of them got to.</p>
+    </div>
 
     @if ($flash)
-        <div class="note note-ok">{{ $flash }}</div>
+        <div class="note note-ok">
+            <x-backfill::icon name="check" />
+            <div>{{ $flash }}</div>
+        </div>
     @endif
 
     @if ($error)
-        <div class="note note-bad">{{ $error }}</div>
+        <div class="note note-bad">
+            <x-backfill::icon name="error" />
+            <div>{{ $error }}</div>
+        </div>
     @endif
 
     @if ($confirming)
-        <div class="note note-bad">
-            <div style="font-weight:600; margin-bottom:6px">Hold on — {{ $confirming }}</div>
-            <div style="margin-bottom:10px">{{ $confirmMessage }}</div>
-            <div class="actions">
-                <button wire:click="runAnyway" style="border-color: var(--bad); color: var(--bad); font-weight:600">
-                    Run anyway
-                </button>
-                <button wire:click="cancelConfirmation">Cancel</button>
+        <div class="note note-warn">
+            <x-backfill::icon name="warning" />
+            <div style="flex:1">
+                <strong>Hold on — {{ $confirming }}</strong>
+                <div style="margin-bottom:12px">{{ $confirmMessage }}</div>
+                <div class="actions">
+                    <button wire:click="runAnyway" class="danger">
+                        <x-backfill::icon name="play" :size="14" /> Run anyway
+                    </button>
+                    <button wire:click="cancelConfirmation">Cancel</button>
+                </div>
             </div>
         </div>
     @endif
@@ -39,22 +50,41 @@
                 <tbody>
                     @forelse ($this->rows as $row)
                         @php($run = $row['run'])
-                        <tr>
+                        @php($status = $run?->status->value ?? 'none')
+                        <tr wire:key="bf-{{ $row['name'] }}">
                             <td>
-                                <button class="link" wire:click="select('{{ $row['name'] }}')">{{ $row['name'] }}</button>
-                                <div><code>{{ $row['class'] }}</code></div>
+                                <div class="name-cell">
+                                    <span class="dot"><x-backfill::icon name="database" :size="16" /></span>
+                                    <span>
+                                        <button class="link" wire:click="select('{{ $row['name'] }}')">
+                                            {{ $row['name'] }}
+                                        </button>
+                                        <code>{{ $row['class'] }}</code>
+                                    </span>
+                                </div>
                             </td>
                             <td>
-                                <span class="badge badge-{{ $run?->status->value ?? 'none' }}">
-                                    {{ $run?->status->label() ?? 'never run' }}
+                                <span class="badge badge-{{ $status }}">
+                                    <x-backfill::icon :size="13" :name="match($status) {
+                                        'running' => 'play',
+                                        'completed' => 'check',
+                                        'paused' => 'pause',
+                                        'failed', 'cancelled' => 'error',
+                                        'interrupted' => 'warning',
+                                        'pending' => 'clock',
+                                        default => 'empty',
+                                    }" />
+                                    {{ $run?->status->label() ?? 'Never run' }}
                                 </span>
                                 @if ($row['stale'])
-                                    <div><code>heartbeat cold</code></div>
+                                    <div style="margin-top:4px"><code>heartbeat cold</code></div>
                                 @endif
                             </td>
                             <td>
                                 @if ($run && $run->total_estimate)
-                                    <div class="bar"><span style="width: {{ $run->progressPercent() }}%"></span></div>
+                                    <div class="bar @if($status === 'completed') is-done @endif">
+                                        <span style="width: {{ $run->progressPercent() }}%"></span>
+                                    </div>
                                     <code>{{ number_format($run->processed_count) }} / {{ number_format($run->total_estimate) }}</code>
                                 @elseif ($run)
                                     <code>{{ number_format($run->processed_count) }} processed</code>
@@ -64,7 +94,7 @@
                             </td>
                             <td class="right">
                                 @if ($run && $run->failed_count > 0)
-                                    <span style="color: var(--bad)">{{ number_format($run->failed_count) }}</span>
+                                    <span class="badge badge-failed">{{ number_format($run->failed_count) }}</span>
                                 @else
                                     <span class="muted">0</span>
                                 @endif
@@ -72,22 +102,36 @@
                             <td><code>{{ $run?->cursor ?? '—' }}</code></td>
                             <td>
                                 <div class="actions">
-                                    @if ($run && $run->status->value === 'running')
-                                        <button wire:click="pause('{{ $row['name'] }}')">Pause</button>
-                                        <button wire:click="cancel('{{ $row['name'] }}')">Cancel</button>
+                                    @if ($run && $status === 'running')
+                                        <button wire:click="pause('{{ $row['name'] }}')">
+                                            <x-backfill::icon name="pause" :size="14" /> Pause
+                                        </button>
+                                        <button wire:click="cancel('{{ $row['name'] }}')" class="icon-only" title="Cancel">
+                                            <x-backfill::icon name="stop" :size="14" />
+                                        </button>
                                     @elseif ($run && $run->status->isResumable())
-                                        <button wire:click="resume('{{ $row['name'] }}')">Resume</button>
-                                        <button wire:click="cancel('{{ $row['name'] }}')">Cancel</button>
+                                        <button wire:click="resume('{{ $row['name'] }}')" class="primary">
+                                            <x-backfill::icon name="play" :size="14" /> Resume
+                                        </button>
+                                        <button wire:click="cancel('{{ $row['name'] }}')" class="icon-only" title="Cancel">
+                                            <x-backfill::icon name="stop" :size="14" />
+                                        </button>
                                     @else
-                                        <button wire:click="start('{{ $row['name'] }}')">Run</button>
+                                        <button wire:click="start('{{ $row['name'] }}')" class="primary">
+                                            <x-backfill::icon name="play" :size="14" /> Run
+                                        </button>
                                     @endif
                                 </div>
                             </td>
                         </tr>
                     @empty
                         <tr>
-                            <td colspan="6" class="muted">
-                                No backfills found in <code>{{ config('backfill.path') }}</code>.
+                            <td colspan="6">
+                                <div class="empty">
+                                    <x-backfill::icon name="empty" :size="34" />
+                                    <p>No backfills found in <code>{{ config('backfill.path') }}</code>.</p>
+                                    <p class="muted">Create one with <code>php artisan make:backfill BackfillUserSlugs</code></p>
+                                </div>
                             </td>
                         </tr>
                     @endforelse
@@ -99,80 +143,98 @@
     @if ($this->run)
         @php($run = $this->run)
         <div class="panel">
-            <h2>
-                {{ $run->backfill }} — run #{{ $run->id }}
-                <button class="link" wire:click="select(null)" style="float: right">close</button>
-            </h2>
+            <div class="panel-head">
+                <x-backfill::icon name="gauge" :size="15" class="ico muted" />
+                <h2>{{ $run->backfill }} — run #{{ $run->id }}</h2>
+                <span class="spacer"></span>
+                <button class="icon-only" wire:click="select(null)" title="Close">
+                    <x-backfill::icon name="close" :size="15" />
+                </button>
+            </div>
 
-            <div class="grid">
+            <div class="stats">
                 <div class="stat">
                     <div class="label">Status</div>
-                    <div class="value">
+                    <div class="value" style="font-size:15px">
                         <span class="badge badge-{{ $run->status->value }}">{{ $run->status->label() }}</span>
                     </div>
                 </div>
                 <div class="stat">
-                    <div class="label">Processed</div>
+                    <div class="label"><x-backfill::icon name="check" :size="12" /> Processed</div>
                     <div class="value">{{ number_format($run->processed_count) }}</div>
                 </div>
                 <div class="stat">
-                    <div class="label">Failed</div>
+                    <div class="label"><x-backfill::icon name="error" :size="12" /> Failed</div>
                     <div class="value">{{ number_format($run->failed_count) }}</div>
                 </div>
                 <div class="stat">
-                    <div class="label">Throughput</div>
-                    <div class="value">{{ $run->throughputPerSecond() ?? '—' }}<span class="muted" style="font-size:12px"> rows/s</span></div>
+                    <div class="label"><x-backfill::icon name="gauge" :size="12" /> Throughput</div>
+                    <div class="value">{{ number_format($run->throughputPerSecond() ?? 0) }}<small> rows/s</small></div>
                 </div>
                 <div class="stat">
                     <div class="label">Batches</div>
                     <div class="value">{{ number_format($run->batch_count) }}</div>
                 </div>
                 <div class="stat">
-                    <div class="label">Cursor</div>
-                    <div class="value"><code style="font-size:14px">{{ $run->cursor ?? '—' }}</code></div>
+                    <div class="label"><x-backfill::icon name="cursor" :size="12" /> Cursor</div>
+                    <div class="value" style="font-size:15px"><span class="mono">{{ $run->cursor ?? '—' }}</span></div>
                 </div>
                 <div class="stat">
-                    <div class="label">Started by</div>
+                    <div class="label"><x-backfill::icon name="user" :size="12" /> Started by</div>
                     <div class="value" style="font-size:14px">{{ $run->started_by ?? '—' }}</div>
                 </div>
                 <div class="stat">
-                    <div class="label">Heartbeat</div>
+                    <div class="label"><x-backfill::icon name="clock" :size="12" /> Heartbeat</div>
                     <div class="value" style="font-size:14px">{{ $run->heartbeat_at?->diffForHumans() ?? '—' }}</div>
                 </div>
             </div>
 
-            @if (! empty($run->meta['stop_reason']))
-                <div class="note note-bad" style="margin-top:16px">{{ $run->meta['stop_reason'] }}</div>
-            @endif
-
-            @if ($run->error)
-                <div class="note note-bad" style="margin-top:16px"><code>{{ $run->error }}</code></div>
-            @endif
-
-            @if ($this->sparkline)
-                <div style="margin-top:20px">
-                    <div class="label muted" style="font-size:12px; text-transform:uppercase; letter-spacing:.04em">
-                        Batch duration — last {{ count($this->sparkline) }} batches
+            <div class="panel-body">
+                @if (! empty($run->meta['stop_reason']))
+                    <div class="note note-warn" style="margin-bottom:16px">
+                        <x-backfill::icon name="warning" />
+                        <div>{{ $run->meta['stop_reason'] }}</div>
                     </div>
+                @endif
+
+                @if ($run->error)
+                    <div class="note note-bad" style="margin-bottom:16px">
+                        <x-backfill::icon name="error" />
+                        <div><code>{{ $run->error }}</code></div>
+                    </div>
+                @endif
+
+                <div class="label muted" style="font-size:11px; text-transform:uppercase; letter-spacing:.05em; font-weight:650; margin-bottom:8px">
+                    Batch duration
+                    @if ($this->sparkline)
+                        — last {{ count($this->sparkline) }} batches
+                    @endif
+                </div>
+
+                @if ($this->sparkline)
                     <div class="spark">
                         @foreach ($this->sparkline as $bar)
-                            <i style="height: {{ max(2, $bar['height']) }}%" title="{{ $bar['ms'] }}ms"></i>
+                            <i style="height: {{ max(3, $bar['height']) }}%" title="{{ $bar['ms'] }}ms"></i>
                         @endforeach
                     </div>
-                </div>
-            @else
-                <p class="muted" style="margin-top:20px">
-                    No batch timings recorded. Set <code>backfill.record_batches</code> to true to collect them.
-                </p>
-            @endif
+                @else
+                    <p class="muted" style="margin:0">
+                        No batch timings recorded. Set <code>backfill.record_batches</code> to <code>true</code> to collect them.
+                    </p>
+                @endif
+            </div>
         </div>
 
         @if ($this->errors->isNotEmpty())
             <div class="panel">
-                <h2>
-                    Failed rows
-                    <button wire:click="retryFailed('{{ $run->backfill }}')" style="float: right">Retry all</button>
-                </h2>
+                <div class="panel-head">
+                    <x-backfill::icon name="error" :size="15" class="ico" style="color: var(--bad)" />
+                    <h2>Failed rows</h2>
+                    <span class="spacer"></span>
+                    <button wire:click="retryFailed('{{ $run->backfill }}')">
+                        <x-backfill::icon name="retry" :size="14" /> Retry all
+                    </button>
+                </div>
                 <div class="scroll">
                     <table>
                         <thead>
@@ -185,7 +247,7 @@
                         </thead>
                         <tbody>
                             @foreach ($this->errors as $failure)
-                                <tr>
+                                <tr wire:key="err-{{ $failure->id }}">
                                     <td><code>{{ $failure->record_id ?? '—' }}</code></td>
                                     <td><code>{{ class_basename($failure->exception_class) }}</code></td>
                                     <td>{{ \Illuminate\Support\Str::limit($failure->message, 90) }}</td>

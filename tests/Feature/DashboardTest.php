@@ -29,7 +29,7 @@ it('lists every discovered backfill', function () {
 });
 
 it('says so when a backfill has never run', function () {
-    Livewire::test(BackfillDashboard::class)->assertSee('never run');
+    Livewire::test(BackfillDashboard::class)->assertSee('Never run');
 });
 
 it('queues a run rather than doing it in the web request', function () {

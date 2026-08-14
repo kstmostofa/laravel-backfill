@@ -17,35 +17,59 @@ hero:
       link: https://github.com/kstmostofa/laravel-backfill
 
 features:
-  - title: Killable at any instant
+  - icon: 💀
+    title: Killable at any instant
     details: Every batch commits its work, its errors and its cursor together. A SIGKILL mid-batch costs one batch, and the resume lands on the same end state as an uninterrupted run.
     link: /safety/invariant
     linkText: The invariant
 
-  - title: Never skips rows
+  - icon: 🎯
+    title: Never skips rows
     details: chunk() pages with OFFSET, so a self-excluding backfill silently misses about half the table. This only ever walks WHERE id > ? ORDER BY id, and that is not configurable.
     link: /safety/keyset-pagination
     linkText: Keyset pagination
 
-  - title: A dry run that means something
+  - icon: 🔍
+    title: A dry run that means something
     details: Real before-and-after diffs from rows genuinely processed inside a rolled-back transaction, with mail, jobs and HTTP intercepted before they escape.
     link: /features/dry-run
     linkText: See the output
 
-  - title: One bad row cannot stop it
+  - icon: 🛡️
+    title: One bad row cannot stop it
     details: Per-row savepoints, recorded failures, and a circuit breaker that pauses the run when failures stop looking like bad rows and start looking like a bad assumption.
     link: /safety/failures
     linkText: Failures and retries
 
-  - title: Support staff can run it
+  - icon: 🙋
+    title: Support staff can run it
     details: Mark a backfill operator-runnable, declare its inputs, and someone in support can paste a list of ids and press Run — no shell, no developer, no way to reach anything you did not expose.
     link: /features/operator-panel
     linkText: The operator panel
 
-  - title: Kind to your replicas
+  - icon: 🩺
+    title: Kind to your replicas
     details: Watches replication lag and slows down before anyone notices, halving batches between the soft and hard thresholds and pausing rather than pushing replicas further behind.
     link: /safety/throttling
     linkText: Throttling
+
+  - icon: ⚡
+    title: 8M rows in 75 seconds
+    details: Measured, not estimated — ~110,000 rows/sec on the bulk path against a 923 MB table, with throughput flat from 1M to 8M because keyset pagination seeks rather than scans.
+    link: /guide/benchmarks
+    linkText: Benchmarks
+
+  - icon: 📊
+    title: A dashboard and a task panel
+    details: Live progress, throughput, batch-duration sparkline and failed rows for engineers; a separate gated panel where support staff paste ids and watch a progress bar.
+    link: /features/dashboard
+    linkText: The dashboard
+
+  - icon: 🧪
+    title: Tested where it counts
+    details: 258 tests green on SQLite, MySQL 8.4 and PostgreSQL 18, including a chaos test that forks and sends the child a real SIGKILL from inside a batch transaction.
+    link: /advanced/testing
+    linkText: Testing
 ---
 
 ## Install

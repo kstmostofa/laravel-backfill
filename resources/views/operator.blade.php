@@ -1,44 +1,67 @@
 <div wire:poll.3s>
-    <h1>Run a task</h1>
-    <p class="sub">Pick a task, fill in the details, and press Run. It carries on in the background.</p>
+    <div class="page-head">
+        <h1>Run a task</h1>
+        <p>Pick a task, fill in the details, and press Run. It carries on in the background.</p>
+    </div>
 
     @if ($flash)
-        <div class="note note-ok">{{ $flash }}</div>
+        <div class="note note-ok">
+            <x-backfill::icon name="check" />
+            <div>{{ $flash }}</div>
+        </div>
     @endif
 
     @if ($errors)
         <div class="note note-bad">
-            @foreach ($errors as $message)
-                <div>{{ $message }}</div>
-            @endforeach
+            <x-backfill::icon name="error" />
+            <div>
+                <strong>That did not work</strong>
+                @foreach ($errors as $message)
+                    <div>{{ $message }}</div>
+                @endforeach
+            </div>
         </div>
     @endif
 
     @if ($this->available->isEmpty())
         <div class="panel">
-            <p class="muted">
-                No tasks are available. A developer marks one available by setting
-                <code>public bool $operatorRunnable = true;</code> on it.
-            </p>
+            <div class="empty">
+                <x-backfill::icon name="empty" :size="34" />
+                <p>There are no tasks available to you.</p>
+                <p class="muted">
+                    A developer makes one available by setting
+                    <code>public bool $operatorRunnable = true;</code> on it.
+                </p>
+            </div>
         </div>
     @else
         <div class="panel">
-            <h2>Available tasks</h2>
+            <div class="panel-head">
+                <span class="badge badge-running" style="width:22px;height:22px;padding:0;justify-content:center">1</span>
+                <h2>Choose a task</h2>
+            </div>
             <div class="scroll">
                 <table>
                     <tbody>
                         @foreach ($this->available as $backfill)
-                            <tr>
+                            <tr wire:key="task-{{ $backfill->name() }}">
                                 <td>
-                                    <strong>{{ $backfill->description() ?: $backfill->name() }}</strong>
-                                    @if ($backfill->description())
-                                        <div><code>{{ $backfill->name() }}</code></div>
-                                    @endif
+                                    <div class="name-cell">
+                                        <span class="dot"><x-backfill::icon name="bolt" :size="16" /></span>
+                                        <span>
+                                            <strong>{{ $backfill->description() ?: $backfill->name() }}</strong>
+                                            <code>{{ $backfill->name() }}</code>
+                                        </span>
+                                    </div>
                                 </td>
                                 <td class="right">
-                                    <button wire:click="select('{{ $backfill->name() }}')">
-                                        {{ $selected === $backfill->name() ? 'Selected' : 'Choose' }}
-                                    </button>
+                                    @if ($selected === $backfill->name())
+                                        <span class="badge badge-completed">
+                                            <x-backfill::icon name="check" :size="13" /> Selected
+                                        </span>
+                                    @else
+                                        <button wire:click="select('{{ $backfill->name() }}')">Choose</button>
+                                    @endif
                                 </td>
                             </tr>
                         @endforeach
@@ -50,98 +73,116 @@
 
     @if ($this->backfill)
         <div class="panel">
-            <h2>
-                {{ $this->backfill->description() ?: $this->backfill->name() }}
-                <button class="link" wire:click="select(null)" style="float: right">close</button>
-            </h2>
+            <div class="panel-head">
+                <span class="badge badge-running" style="width:22px;height:22px;padding:0;justify-content:center">2</span>
+                <h2>{{ $this->backfill->description() ?: $this->backfill->name() }}</h2>
+                <span class="spacer"></span>
+                <button class="icon-only" wire:click="select(null)" title="Close">
+                    <x-backfill::icon name="close" :size="15" />
+                </button>
+            </div>
 
-            @forelse ($this->backfill->parameters() as $parameter)
-                <div style="margin-bottom: 16px">
-                    <label style="display:block; font-weight:600; margin-bottom:4px">
-                        {{ $parameter->label }}
-                        @if ($parameter->required)
-                            <span style="color: var(--bad)">*</span>
+            <div class="panel-body">
+                @forelse ($this->backfill->parameters() as $parameter)
+                    <label class="field" wire:key="p-{{ $parameter->key }}">
+                        <span class="lab">
+                            {{ $parameter->label }}
+                            @if ($parameter->required)<span class="req">*</span>@endif
+                        </span>
+
+                        @if ($parameter->help)
+                            <span class="hint">{{ $parameter->help }}</span>
+                        @endif
+
+                        @if ($parameter->type === 'ids' || $parameter->type === 'textarea')
+                            <textarea wire:model="input.{{ $parameter->key }}" rows="5"
+                                placeholder="{{ $parameter->placeholder }}"></textarea>
+                            @if ($parameter->type === 'ids' && $parameter->max)
+                                <span class="hint" style="margin-top:5px; display:block">
+                                    One per line, or separated by commas. Up to {{ number_format($parameter->max) }}.
+                                </span>
+                            @endif
+                        @elseif ($parameter->type === 'select')
+                            <select wire:model="input.{{ $parameter->key }}" style="max-width:280px">
+                                <option value="">Choose…</option>
+                                @foreach ($parameter->options as $value => $label)
+                                    <option value="{{ $value }}">{{ $label }}</option>
+                                @endforeach
+                            </select>
+                        @elseif ($parameter->type === 'boolean')
+                            <span style="display:flex; align-items:center; gap:8px; font-weight:400">
+                                <input type="checkbox" wire:model="input.{{ $parameter->key }}" style="width:auto">
+                                Yes
+                            </span>
+                        @else
+                            <input type="{{ $parameter->type === 'number' ? 'number' : 'text' }}"
+                                wire:model="input.{{ $parameter->key }}"
+                                placeholder="{{ $parameter->placeholder }}">
                         @endif
                     </label>
+                @empty
+                    <p class="muted">This task needs no details — just press Run.</p>
+                @endforelse
 
-                    @if ($parameter->help)
-                        <div class="muted" style="font-size:13px; margin-bottom:6px">{{ $parameter->help }}</div>
-                    @endif
-
-                    @if ($parameter->type === 'ids' || $parameter->type === 'textarea')
-                        <textarea
-                            wire:model="input.{{ $parameter->key }}"
-                            rows="5"
-                            placeholder="{{ $parameter->placeholder }}"
-                            style="width:100%; padding:8px; border-radius:6px; border:1px solid var(--border); background:var(--bg); color:var(--text); font-family:ui-monospace, monospace"
-                        ></textarea>
-                        @if ($parameter->type === 'ids' && $parameter->max)
-                            <div class="muted" style="font-size:12px; margin-top:4px">
-                                One per line, or separated by commas. Up to {{ number_format($parameter->max) }}.
-                            </div>
-                        @endif
-                    @elseif ($parameter->type === 'select')
-                        <select
-                            wire:model="input.{{ $parameter->key }}"
-                            style="padding:8px; border-radius:6px; border:1px solid var(--border); background:var(--bg); color:var(--text)"
-                        >
-                            <option value="">Choose…</option>
-                            @foreach ($parameter->options as $value => $label)
-                                <option value="{{ $value }}">{{ $label }}</option>
-                            @endforeach
-                        </select>
-                    @elseif ($parameter->type === 'boolean')
-                        <label style="font-weight:400">
-                            <input type="checkbox" wire:model="input.{{ $parameter->key }}"> Yes
-                        </label>
-                    @else
-                        <input
-                            type="{{ $parameter->type === 'number' ? 'number' : 'text' }}"
-                            wire:model="input.{{ $parameter->key }}"
-                            placeholder="{{ $parameter->placeholder }}"
-                            style="width:100%; max-width:340px; padding:8px; border-radius:6px; border:1px solid var(--border); background:var(--bg); color:var(--text)"
-                        >
-                    @endif
-                </div>
-            @empty
-                <p class="muted">This task needs no details — just press Run.</p>
-            @endforelse
-
-            <button wire:click="run" style="border-color: var(--accent); color: var(--accent); font-weight:600">
-                Run
-            </button>
+                <button wire:click="run" class="primary" wire:loading.attr="disabled">
+                    <x-backfill::icon name="play" :size="15" />
+                    <span wire:loading.remove wire:target="run">Run</span>
+                    <span wire:loading wire:target="run">Starting…</span>
+                </button>
+            </div>
         </div>
     @endif
 
     @if ($this->run)
         @php($run = $this->run)
+        @php($status = $run->status->value)
         <div class="panel">
-            <h2>Progress</h2>
+            <div class="panel-head">
+                <span class="badge badge-running" style="width:22px;height:22px;padding:0;justify-content:center">3</span>
+                <h2>Progress</h2>
+                <span class="spacer"></span>
+                <span class="badge badge-{{ $status }}">
+                    <x-backfill::icon :size="13" :name="match($status) {
+                        'running' => 'play',
+                        'completed' => 'check',
+                        'paused', 'interrupted' => 'pause',
+                        'failed', 'cancelled' => 'error',
+                        default => 'clock',
+                    }" />
+                    {{ $run->status->label() }}
+                </span>
+            </div>
 
-            <p style="font-size:16px; margin:0 0 12px">{{ $this->progressLabel }}</p>
+            <div class="panel-body">
+                <p style="font-size:16px; margin:0 0 14px; font-weight:550">{{ $this->progressLabel }}</p>
 
-            @if ($run->total_estimate)
-                <div class="bar" style="width:100%; height:10px">
-                    <span style="width: {{ $run->progressPercent() }}%"></span>
-                </div>
-                <div class="muted" style="font-size:13px; margin-top:6px">
-                    {{ number_format($run->processed_count) }} of {{ number_format($run->total_estimate) }}
-                    ({{ $run->progressPercent() }}%)
-                </div>
-            @endif
+                @if ($run->total_estimate)
+                    <div class="bar @if($status === 'completed') is-done @endif" style="width:100%; height:10px">
+                        <span style="width: {{ $run->progressPercent() }}%"></span>
+                    </div>
+                    <div class="muted" style="font-size:13px; margin-top:7px">
+                        {{ number_format($run->processed_count) }} of {{ number_format($run->total_estimate) }}
+                        ({{ $run->progressPercent() }}%)
+                    </div>
+                @endif
 
-            @if (! empty($run->meta['parameter_summary']))
-                <div class="muted" style="font-size:13px; margin-top:10px">
-                    Started with — {{ $run->meta['parameter_summary'] }}
-                </div>
-            @endif
+                @if (! empty($run->meta['parameter_summary']))
+                    <div class="muted" style="font-size:13px; margin-top:12px">
+                        <x-backfill::icon name="cursor" :size="13" />
+                        Started with — {{ $run->meta['parameter_summary'] }}
+                    </div>
+                @endif
 
-            @if ($run->failed_count > 0)
-                <div class="note note-bad" style="margin-top:14px">
-                    {{ number_format($run->failed_count) }} rows could not be processed.
-                    Everything else went through. Ask a developer to look at the details.
-                </div>
-            @endif
+                @if ($run->failed_count > 0)
+                    <div class="note note-bad" style="margin:16px 0 0">
+                        <x-backfill::icon name="warning" />
+                        <div>
+                            <strong>{{ number_format($run->failed_count) }} rows could not be processed.</strong>
+                            Everything else went through. Ask a developer to look at the details.
+                        </div>
+                    </div>
+                @endif
+            </div>
         </div>
     @endif
 </div>
