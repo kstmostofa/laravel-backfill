@@ -26,7 +26,7 @@
                 <div style="margin-bottom:12px">{{ $confirmMessage }}</div>
                 <div class="actions">
                     <button wire:click="runAnyway" class="danger">
-                        <x-backfill::icon name="play" :size="14" /> Run anyway
+                        <x-backfill::icon name="play" :size="13" solid /> Run anyway
                     </button>
                     <button wire:click="cancelConfirmation">Cancel</button>
                 </div>
@@ -53,15 +53,10 @@
                         @php($status = $run?->status->value ?? 'none')
                         <tr wire:key="bf-{{ $row['name'] }}">
                             <td>
-                                <div class="name-cell">
-                                    <span class="dot"><x-backfill::icon name="database" :size="16" /></span>
-                                    <span>
-                                        <button class="link" wire:click="select('{{ $row['name'] }}')">
-                                            {{ $row['name'] }}
-                                        </button>
-                                        <code>{{ $row['class'] }}</code>
-                                    </span>
-                                </div>
+                                <button class="link subtle" wire:click="select('{{ $row['name'] }}')">
+                                    {{ $row['name'] }}
+                                </button>
+                                <code style="display:block; margin-top:2px">{{ $row['class'] }}</code>
                             </td>
                             <td>
                                 <span class="badge badge-{{ $status }}">
@@ -72,7 +67,7 @@
                                         'failed', 'cancelled' => 'error',
                                         'interrupted' => 'warning',
                                         'pending' => 'clock',
-                                        default => 'empty',
+                                        default => 'never',
                                     }" />
                                     {{ $run?->status->label() ?? 'Never run' }}
                                 </span>
@@ -111,14 +106,14 @@
                                         </button>
                                     @elseif ($run && $run->status->isResumable())
                                         <button wire:click="resume('{{ $row['name'] }}')" class="primary">
-                                            <x-backfill::icon name="play" :size="14" /> Resume
+                                            <x-backfill::icon name="play" :size="13" solid /> Resume
                                         </button>
                                         <button wire:click="cancel('{{ $row['name'] }}')" class="icon-only" title="Cancel">
                                             <x-backfill::icon name="stop" :size="14" />
                                         </button>
                                     @else
                                         <button wire:click="start('{{ $row['name'] }}')" class="primary">
-                                            <x-backfill::icon name="play" :size="14" /> Run
+                                            <x-backfill::icon name="play" :size="13" solid /> Run
                                         </button>
                                     @endif
                                 </div>
@@ -160,15 +155,15 @@
                     </div>
                 </div>
                 <div class="stat">
-                    <div class="label"><x-backfill::icon name="check" :size="12" /> Processed</div>
+                    <div class="label">Processed</div>
                     <div class="value">{{ number_format($run->processed_count) }}</div>
                 </div>
                 <div class="stat">
-                    <div class="label"><x-backfill::icon name="error" :size="12" /> Failed</div>
+                    <div class="label">Failed</div>
                     <div class="value">{{ number_format($run->failed_count) }}</div>
                 </div>
                 <div class="stat">
-                    <div class="label"><x-backfill::icon name="gauge" :size="12" /> Throughput</div>
+                    <div class="label">Throughput</div>
                     <div class="value">{{ number_format($run->throughputPerSecond() ?? 0) }}<small> rows/s</small></div>
                 </div>
                 <div class="stat">
@@ -176,15 +171,15 @@
                     <div class="value">{{ number_format($run->batch_count) }}</div>
                 </div>
                 <div class="stat">
-                    <div class="label"><x-backfill::icon name="cursor" :size="12" /> Cursor</div>
+                    <div class="label">Cursor</div>
                     <div class="value" style="font-size:15px"><span class="mono">{{ $run->cursor ?? '—' }}</span></div>
                 </div>
                 <div class="stat">
-                    <div class="label"><x-backfill::icon name="user" :size="12" /> Started by</div>
+                    <div class="label">Started by</div>
                     <div class="value" style="font-size:14px">{{ $run->started_by ?? '—' }}</div>
                 </div>
                 <div class="stat">
-                    <div class="label"><x-backfill::icon name="clock" :size="12" /> Heartbeat</div>
+                    <div class="label">Heartbeat</div>
                     <div class="value" style="font-size:14px">{{ $run->heartbeat_at?->diffForHumans() ?? '—' }}</div>
                 </div>
             </div>

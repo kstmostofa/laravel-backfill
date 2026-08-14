@@ -1,4 +1,4 @@
-@props(['name', 'size' => 16])
+@props(['name', 'size' => 16, 'solid' => false])
 
 {{--
     Lucide icons (ISC licence), copied verbatim from the official set.
@@ -31,14 +31,18 @@
         'user' => '<path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>',
         'close' => '<path d="M18 6 6 18"/><path d="m6 6 12 12"/>',
         'empty' => '<polyline points="22 12 16 12 14 15 10 15 8 12 2 12"/><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/>',
-        'cursor' => '<circle cx="12" cy="12" r="10"/><line x1="22" x2="18" y1="12" y2="12"/><line x1="6" x2="2" y1="12" y2="12"/><line x1="12" x2="12" y1="6" y2="2"/><line x1="12" x2="12" y1="22" y2="18"/>',
+        'cursor' => '<path d="M17 3a2 2 0 0 1 2 2v15a1 1 0 0 1-1.496.868l-4.512-2.578a2 2 0 0 0-1.984 0l-4.512 2.578A1 1 0 0 1 5 20V5a2 2 0 0 1 2-2z"/>',
+        'never' => '<circle cx="12" cy="12" r="10"/><path d="M8 12h8"/>',
+        'list' => '<path d="M3 5h.01"/><path d="M3 12h.01"/><path d="M3 19h.01"/><path d="M8 5h13"/><path d="M8 12h13"/><path d="M8 19h13"/>',
+        'activity' => '<path d="M22 12h-2.48a2 2 0 0 0-1.93 1.46l-2.35 8.36a.25.25 0 0 1-.48 0L9.24 2.18a.25.25 0 0 0-.48 0l-2.35 8.36A2 2 0 0 1 4.49 12H2"/>',
     ];
 @endphp
 
 <svg
     {{ $attributes->merge(['class' => 'ico']) }}
     width="{{ $size }}" height="{{ $size }}"
-    viewBox="0 0 24 24" fill="none"
+    viewBox="0 0 24 24"
+    fill="{{ $solid ? 'currentColor' : 'none' }}"
     stroke="currentColor" stroke-width="2"
     stroke-linecap="round" stroke-linejoin="round"
     aria-hidden="true" focusable="false"

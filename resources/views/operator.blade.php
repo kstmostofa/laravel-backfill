@@ -125,7 +125,7 @@
                 @endforelse
 
                 <button wire:click="run" class="primary" wire:loading.attr="disabled">
-                    <x-backfill::icon name="play" :size="15" />
+                    <x-backfill::icon name="play" :size="14" solid />
                     <span wire:loading.remove wire:target="run">Run</span>
                     <span wire:loading wire:target="run">Starting…</span>
                 </button>
@@ -168,7 +168,6 @@
 
                 @if (! empty($run->meta['parameter_summary']))
                     <div class="muted" style="font-size:13px; margin-top:12px">
-                        <x-backfill::icon name="cursor" :size="13" />
                         Started with — {{ $run->meta['parameter_summary'] }}
                     </div>
                 @endif

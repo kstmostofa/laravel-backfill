@@ -160,16 +160,20 @@
             color: var(--muted); cursor: pointer;
         }
         .theme-toggle:hover { color: var(--brand); border-color: var(--brand); }
-        :root[data-theme="dark"] .theme-toggle .i-sun,
-        :root[data-theme="auto"] .theme-toggle .i-sun { display: none; }
-        :root[data-theme="dark"] .theme-toggle .i-moon { display: block; }
-        .theme-toggle .i-moon { display: none; }
+
+        /* Show the moon while light (click for dark), the sun while dark.
+           Exactly one is visible in every state — an earlier version hid both
+           in "auto" and left an empty box in the corner. */
+        .theme-toggle .i-sun { display: none; }
+        .theme-toggle .i-moon { display: block; }
+
+        :root[data-theme="dark"] .theme-toggle .i-sun { display: block; }
+        :root[data-theme="dark"] .theme-toggle .i-moon { display: none; }
+
         @media (prefers-color-scheme: dark) {
-            :root[data-theme="auto"] .theme-toggle .i-moon { display: block; }
-            :root[data-theme="auto"] .theme-toggle .i-sun { display: none; }
+            :root[data-theme="auto"] .theme-toggle .i-sun { display: block; }
+            :root[data-theme="auto"] .theme-toggle .i-moon { display: none; }
         }
-        :root[data-theme="light"] .theme-toggle .i-sun { display: block; }
-        :root[data-theme="light"] .theme-toggle .i-moon { display: none; }
 
         /* ---------- layout ---------- */
 
@@ -279,6 +283,12 @@
         }
         button.link:hover { text-decoration: underline; }
 
+        /* Row names are ordinary text until hovered. Painting every name in
+           brand red made a table of healthy backfills look like a list of
+           problems, and left nothing for the red to actually mean. */
+        button.link.subtle { color: var(--text); }
+        button.link.subtle:hover { color: var(--brand); }
+
         button.icon-only { padding: 7px; }
 
         .actions { display: flex; gap: 6px; flex-wrap: wrap; }
@@ -371,7 +381,7 @@
                 @php($here = trim(request()->path(), '/'))
 
                 <a class="tab" href="{{ url($base) }}" @if($here === $base) aria-current="page" @endif>
-                    <x-backfill::icon name="gauge" :size="15" /> Dashboard
+                    <x-backfill::icon name="list" :size="15" /> Dashboard
                 </a>
                 <a class="tab" href="{{ url($ops) }}" @if($here === $ops) aria-current="page" @endif>
                     <x-backfill::icon name="bolt" :size="15" /> Tasks
