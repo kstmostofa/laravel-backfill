@@ -51,6 +51,7 @@ export default defineConfig({
                     { text: 'Installation', link: '/guide/installation' },
                     { text: 'Writing a backfill', link: '/guide/writing-a-backfill' },
                     { text: 'Running a backfill', link: '/guide/running' },
+                    { text: 'Local development', link: '/guide/local-development' },
                 ],
             },
             {

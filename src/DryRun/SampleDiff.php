@@ -33,9 +33,12 @@ class SampleDiff
             return 'no change';
         }
 
+        // ASCII "->" rather than a unicode arrow: Laravel's console output
+        // strips U+2192 specifically, so a "→" here silently renders as
+        // "slug: null value" with nothing between the two sides.
         return collect($this->changes)
             ->map(fn (array $change, string $column) => sprintf(
-                '%s: %s → %s',
+                '%s: %s -> %s',
                 $column,
                 static::render($change['from']),
                 static::render($change['to']),

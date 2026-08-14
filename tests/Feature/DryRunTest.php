@@ -59,7 +59,30 @@ it('shows the real before and after for each sampled row', function () {
         ->and($first->changes['slug']['from'])->toBeNull()
         ->and($first->changes['slug']['to'])->toBe('user-1')
         ->and($first->changes)->toHaveKey('process_count')
-        ->and($first->summary())->toContain('slug: null → user-1');
+        // Plain ASCII: Laravel's console output silently strips U+2192, so a
+        // unicode arrow here would render as "slug: null user-1".
+        ->and($first->summary())->toContain('slug: null -> user-1');
+});
+
+it('renders both sides of a diff in the same format', function () {
+    User::seedUnslugged(3);
+
+    $report = dryRun(BackfillUserSlugs::class, 1);
+
+    // getOriginal() would give a Carbon for updated_at while the "after" side
+    // reads a raw string, so a merely-touched timestamp would print as
+    // '"2026-08-14T14:51:13.000000Z" -> 2026-08-14 14:51:40'.
+    $summary = $report->samples[0]->summary();
+
+    expect($summary)->not->toContain('"')
+        ->and($summary)->not->toContain('T00:00:00');
+});
+
+it('keeps the diff free of characters the console strips', function () {
+    User::seedUnslugged(2);
+
+    expect(dryRun(BackfillUserSlugs::class, 1)->samples[0]->summary())
+        ->not->toContain('→');
 });
 
 it('samples only as many rows as asked for', function () {

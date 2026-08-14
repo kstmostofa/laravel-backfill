@@ -118,7 +118,12 @@ class DryRunner
 
         foreach ($rows as $record) {
             $id = (string) ($record->{$key} ?? '');
-            $before = $record instanceof Model ? $record->getOriginal() : (array) $record;
+
+            // Raw values, not cast ones. getOriginal() would hand back Carbon
+            // instances for dates while the "after" side reads raw strings
+            // from the database, and the diff would then render the two halves
+            // in different formats for a column that merely changed.
+            $before = $record instanceof Model ? $record->getRawOriginal() : (array) $record;
 
             try {
                 $backfill->process($record);
