@@ -209,6 +209,60 @@ it('builds a sparkline scaled to the slowest batch', function () {
         ->and(array_column($sparkline, 'ms'))->toBe([10, 40, 20]);
 });
 
+it('gives every bar something to say on hover', function () {
+    config()->set('backfill.record_batches', true);
+    User::seedUnslugged(6);
+
+    runBackfill(BackfillUserSlugs::class);
+
+    $bars = Livewire::test(BackfillDashboard::class)
+        ->call('select', 'user-slugs')
+        ->instance()
+        ->sparkline;
+
+    // Which batch, how big it was, how long it took — a bare duration says a
+    // batch was slow without hinting at why.
+    expect($bars[0]['tip'])->toContain('Batch 1')
+        ->and($bars[0]['tip'])->toContain('2 rows')
+        ->and($bars[0]['tip'])->toContain('ms')
+        ->and($bars[0])->toHaveKeys(['failed', 'retried']);
+});
+
+it('summarises the batch timings so the chart reads without hovering', function () {
+    config()->set('backfill.record_batches', true);
+    User::seedUnslugged(6);
+
+    $run = runBackfill(BackfillUserSlugs::class);
+
+    \Kstmostofa\Backfill\Models\BackfillRunBatch::where('run_id', $run->id)
+        ->orderBy('id')
+        ->get()
+        ->each(fn ($batch, $i) => $batch->forceFill(['duration_ms' => [10, 40, 20][$i]])->save());
+
+    $summary = Livewire::test(BackfillDashboard::class)
+        ->call('select', 'user-slugs')
+        ->instance()
+        ->sparkSummary;
+
+    expect($summary)->toBe(['min' => 10, 'median' => 20, 'max' => 40]);
+});
+
+it('flags a batch that failed rows or was retried', function () {
+    config()->set('backfill.record_batches', true);
+    BackfillWithFailingRow::$poisoned = [3];
+    User::seedUnslugged(6);
+
+    $run = runBackfill(BackfillWithFailingRow::class);
+
+    $bars = Livewire::test(BackfillDashboard::class)
+        ->call('select', 'with-failing-row')
+        ->instance()
+        ->sparkline;
+
+    expect(collect($bars)->firstWhere('failed', '>', 0))->not->toBeNull()
+        ->and(collect($bars)->firstWhere('failed', '>', 0)['tip'])->toContain('1 failed');
+});
+
 it('explains an empty sparkline rather than showing nothing', function () {
     User::seedUnslugged(4);
     runBackfill(BackfillUserSlugs::class);

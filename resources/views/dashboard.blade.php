@@ -236,9 +236,21 @@
                 @if ($this->sparkline)
                     <div class="spark">
                         @foreach ($this->sparkline as $bar)
-                            <i style="height: {{ max(3, $bar['height']) }}%" title="{{ $bar['ms'] }}ms"></i>
+                            <i
+                                class="@if($bar['failed'] > 0) has-failed @elseif($bar['retried']) was-retried @endif"
+                                style="height: {{ max(3, $bar['height']) }}%"
+                                data-tip="{{ $bar['tip'] }}"
+                            ></i>
                         @endforeach
                     </div>
+
+                    @if ($this->sparkSummary)
+                        <div class="spark-legend">
+                            <span>fastest <b>{{ number_format($this->sparkSummary['min']) }}ms</b></span>
+                            <span>median <b>{{ number_format($this->sparkSummary['median']) }}ms</b></span>
+                            <span>slowest <b>{{ number_format($this->sparkSummary['max']) }}ms</b></span>
+                        </div>
+                    @endif
                 @else
                     <p class="muted" style="margin:0">
                         No batch timings recorded. Set <code>backfill.record_batches</code> to <code>true</code> to collect them.

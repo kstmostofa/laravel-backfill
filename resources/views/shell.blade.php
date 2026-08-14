@@ -28,6 +28,8 @@
             --text-2: #3f444d;
             --muted: #71767f;
             --track: #eef0f3;
+            --tip-bg: #1c1f26;
+            --tip-fg: #f4f5f7;
 
             --ok: #0e7c42;
             --ok-soft: rgba(14, 124, 66, .09);
@@ -62,6 +64,8 @@
             --text-2: #b9c0cc;
             --muted: #8b93a2;
             --track: #1f2532;
+            --tip-bg: #2b3342;
+            --tip-fg: #f4f5f7;
 
             --ok: #4ade80;
             --ok-soft: rgba(74, 222, 128, .12);
@@ -91,6 +95,8 @@
                 --text-2: #b9c0cc;
                 --muted: #8b93a2;
                 --track: #1f2532;
+                --tip-bg: #2b3342;
+                --tip-fg: #f4f5f7;
                 --ok: #4ade80;
                 --ok-soft: rgba(74, 222, 128, .12);
                 --warn: #fbbf24;
@@ -703,16 +709,98 @@
             display: flex;
             align-items: flex-end;
             gap: 3px;
-            height: 56px;
+            /* Height covers the bars plus headroom for a tooltip above the
+               tallest one — border-box would otherwise take the padding out
+               of the bars themselves and squash them. */
+            height: 94px;
+            padding-top: 36px;
         }
 
         .spark i {
+            position: relative;
             flex: 1;
             min-height: 3px;
             border-radius: 3px 3px 0 0;
             background: linear-gradient(180deg, var(--brand-2), var(--brand));
-            opacity: .85;
-            transition: opacity .15s;
+            opacity: .78;
+            transition: opacity .12s, filter .12s;
+        }
+
+        .spark i:hover {
+            opacity: 1;
+            filter: brightness(1.12);
+        }
+
+        /* A bar that failed rows or needed retrying is worth spotting without
+           hovering every one of them. */
+        .spark i.has-failed {
+            background: linear-gradient(180deg, var(--bad), var(--bad));
+        }
+
+        .spark i.was-retried {
+            background: linear-gradient(180deg, var(--warn), var(--warn));
+        }
+
+        /* CSS-only tooltip: native title= waits about a second and cannot be
+           styled, which is no use for scrubbing along forty bars. */
+        .spark i::after {
+            content: attr(data-tip);
+            position: absolute;
+            bottom: calc(100% + 9px);
+            left: 50%;
+            transform: translateX(-50%) translateY(3px);
+            z-index: 5;
+            padding: 6px 10px;
+            border-radius: var(--r-xs);
+            background: var(--tip-bg);
+            color: var(--tip-fg);
+            font-size: 12px;
+            font-weight: 550;
+            line-height: 1.4;
+            white-space: nowrap;
+            box-shadow: 0 4px 14px -4px rgba(0, 0, 0, .35);
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity .12s, transform .12s;
+        }
+
+        .spark i::before {
+            content: '';
+            position: absolute;
+            bottom: calc(100% + 4px);
+            left: 50%;
+            z-index: 5;
+            transform: translateX(-50%) translateY(3px);
+            border: 5px solid transparent;
+            border-top-color: var(--tip-bg);
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity .12s, transform .12s;
+        }
+
+        .spark i:hover::after,
+        .spark i:hover::before {
+            opacity: 1;
+            transform: translateX(-50%) translateY(0);
+        }
+
+        /* Keep the first and last tooltips inside the panel. */
+        .spark i:first-child::after { left: 0; transform: translateX(0) translateY(3px); }
+        .spark i:first-child:hover::after { transform: translateX(0) translateY(0); }
+        .spark i:last-child::after { left: auto; right: 0; transform: translateX(0) translateY(3px); }
+        .spark i:last-child:hover::after { transform: translateX(0) translateY(0); }
+
+        .spark-legend {
+            display: flex;
+            gap: 14px;
+            margin-top: 10px;
+            font-size: 12px;
+            color: var(--muted);
+        }
+
+        .spark-legend b {
+            color: var(--text-2);
+            font-weight: 620;
         }
 
         .spark i:hover {

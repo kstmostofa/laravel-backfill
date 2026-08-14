@@ -285,9 +285,13 @@ class BackfillDashboard extends Component
     }
 
     /**
-     * Recent batch durations, scaled to a 0–100 height for the sparkline.
+     * Recent batches, scaled to a 0–100 height for the sparkline.
      *
-     * @return array<int, array{height: float, ms: int}>
+     * Each bar carries enough to explain itself on hover — which batch, how
+     * many rows, how long, and whether it had to be retried — because a bare
+     * duration tells you a batch was slow without hinting at why.
+     *
+     * @return array<int, array<string, mixed>>
      */
     public function getSparklineProperty(): array
     {
@@ -297,23 +301,67 @@ class BackfillDashboard extends Component
             return [];
         }
 
-        $durations = BackfillRunBatch::query()
+        $batches = BackfillRunBatch::query()
             ->where('run_id', $run->id)
             ->latest('id')
             ->limit(40)
-            ->pluck('duration_ms')
+            ->get()
             ->reverse()
             ->values();
 
-        if ($durations->isEmpty()) {
+        if ($batches->isEmpty()) {
             return [];
         }
 
-        $max = max(1, $durations->max());
+        $max = max(1, (int) $batches->max('duration_ms'));
+        $first = $run->batch_count - $batches->count() + 1;
 
-        return $durations
-            ->map(fn (int $ms) => ['height' => round($ms / $max * 100, 1), 'ms' => $ms])
-            ->all();
+        return $batches->map(function (BackfillRunBatch $batch, int $i) use ($max, $first) {
+            $parts = [
+                'Batch '.number_format(max(1, $first + $i)),
+                number_format($batch->count).' rows',
+                number_format($batch->duration_ms).'ms',
+            ];
+
+            if ($batch->failed > 0) {
+                $parts[] = number_format($batch->failed).' failed';
+            }
+
+            if ($batch->attempts > 1) {
+                $parts[] = $batch->attempts.' attempts';
+            }
+
+            return [
+                'height' => round($batch->duration_ms / $max * 100, 1),
+                'ms' => $batch->duration_ms,
+                'failed' => $batch->failed,
+                'retried' => $batch->attempts > 1,
+                'tip' => implode('  ·  ', $parts),
+            ];
+        })->all();
+    }
+
+    /**
+     * Slowest, median and fastest of the batches shown, so the chart can be
+     * read without hovering anything.
+     *
+     * @return array<string, int>|null
+     */
+    public function getSparkSummaryProperty(): ?array
+    {
+        $bars = collect($this->sparkline);
+
+        if ($bars->isEmpty()) {
+            return null;
+        }
+
+        $sorted = $bars->pluck('ms')->sort()->values();
+
+        return [
+            'min' => (int) $sorted->first(),
+            'median' => (int) $sorted[(int) floor($sorted->count() / 2)],
+            'max' => (int) $sorted->last(),
+        ];
     }
 
     public function render()
