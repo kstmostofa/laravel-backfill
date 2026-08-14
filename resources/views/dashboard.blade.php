@@ -10,6 +10,19 @@
         <div class="note note-bad">{{ $error }}</div>
     @endif
 
+    @if ($confirming)
+        <div class="note note-bad">
+            <div style="font-weight:600; margin-bottom:6px">Hold on — {{ $confirming }}</div>
+            <div style="margin-bottom:10px">{{ $confirmMessage }}</div>
+            <div class="actions">
+                <button wire:click="runAnyway" style="border-color: var(--bad); color: var(--bad); font-weight:600">
+                    Run anyway
+                </button>
+                <button wire:click="cancelConfirmation">Cancel</button>
+            </div>
+        </div>
+    @endif
+
     <div class="panel">
         <div class="scroll">
             <table>

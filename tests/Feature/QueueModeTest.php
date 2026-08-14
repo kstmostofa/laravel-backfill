@@ -1,5 +1,6 @@
 <?php
 
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Queue;
 use Kstmostofa\Backfill\Enums\RunStatus;
 use Kstmostofa\Backfill\Jobs\RunBackfillJob;
@@ -111,4 +112,41 @@ it('runs the whole backfill across a chain of jobs', function () {
 
 it('tags the job so it can be found in Horizon', function () {
     expect((new RunBackfillJob('user-slugs'))->tags())->toBe(['backfill', 'backfill:user-slugs']);
+});
+
+/**
+ * Guards can change between dispatch and execution — the table grows past the
+ * ceiling, or a freeze window opens. That is a policy decision, not a crash,
+ * and it should not fill failed_jobs with stack traces that read like a bug.
+ */
+it('logs a refusal instead of failing the job', function () {
+    Log::spy();
+    User::seedUnslugged(10);
+    config()->set('backfill.guards.max_rows_without_confirmation', 5);
+
+    // No exception escapes the job.
+    (new RunBackfillJob('user-slugs', batchesPerJob: 1, batchSize: 2))->handle(
+        app(\Kstmostofa\Backfill\BackfillRegistry::class),
+        app(\Kstmostofa\Backfill\Runner\BackfillRunner::class),
+    );
+
+    expect(User::whereNull('slug')->count())->toBe(10)
+        ->and(BackfillRun::count())->toBe(0);
+
+    Log::shouldHaveReceived('warning')->once()->withArgs(
+        fn (string $message) => str_contains($message, 'Backfill refused')
+            && str_contains($message, 'above the 5 row ceiling')
+    );
+});
+
+it('runs when the job carries an override', function () {
+    User::seedUnslugged(10);
+    config()->set('backfill.guards.max_rows_without_confirmation', 5);
+
+    (new RunBackfillJob('user-slugs', batchesPerJob: 10, batchSize: 5, force: true))->handle(
+        app(\Kstmostofa\Backfill\BackfillRegistry::class),
+        app(\Kstmostofa\Backfill\Runner\BackfillRunner::class),
+    );
+
+    expect(User::whereNull('slug')->count())->toBe(0);
 });

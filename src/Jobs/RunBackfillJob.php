@@ -7,10 +7,12 @@ use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
+use Illuminate\Support\Facades\Log;
 use Kstmostofa\Backfill\BackfillRegistry;
 use Kstmostofa\Backfill\Enums\RunStatus;
 use Kstmostofa\Backfill\Enums\StopReason;
 use Kstmostofa\Backfill\Exceptions\BackfillAlreadyRunning;
+use Kstmostofa\Backfill\Exceptions\BackfillRefused;
 use Kstmostofa\Backfill\Runner\BackfillRunner;
 use Kstmostofa\Backfill\Runner\RunOptions;
 
@@ -58,6 +60,17 @@ class RunBackfillJob implements ShouldQueue
             ));
         } catch (BackfillAlreadyRunning) {
             // Another worker already has it. Nothing to do and nothing wrong.
+            return;
+        } catch (BackfillRefused $e) {
+            // A guard said no — the table grew past the ceiling, or a freeze
+            // window opened between dispatch and execution. That is a policy
+            // decision, not a crash, so log it rather than filling failed_jobs
+            // with stack traces that read like something broke.
+            Log::warning('Backfill refused: '.$e->getMessage(), [
+                'backfill' => $this->backfill,
+                'tenant' => $this->tenant,
+            ]);
+
             return;
         }
 

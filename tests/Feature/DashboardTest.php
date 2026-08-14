@@ -46,6 +46,82 @@ it('queues a run rather than doing it in the web request', function () {
     expect(User::whereNull('slug')->count())->toBe(6);
 });
 
+/**
+ * The row ceiling used to make a backfill unstartable from the dashboard
+ * altogether: the button dispatched a job with force disabled, the guard threw
+ * inside the worker, and the page carried on saying "never run" while
+ * failed_jobs filled up out of sight.
+ */
+it('asks before starting a run the guards would refuse', function () {
+    Queue::fake();
+    User::seedUnslugged(10);
+    config()->set('backfill.guards.max_rows_without_confirmation', 5);
+
+    Livewire::test(BackfillDashboard::class)
+        ->call('start', 'user-slugs')
+        ->assertSet('confirming', 'user-slugs')
+        ->assertSee('above the 5 row ceiling')
+        ->assertSee('Run anyway');
+
+    // Nothing was queued, so nothing fails in a worker later.
+    Queue::assertNothingPushed();
+});
+
+it('starts the run once someone confirms it', function () {
+    Queue::fake();
+    User::seedUnslugged(10);
+    config()->set('backfill.guards.max_rows_without_confirmation', 5);
+
+    Livewire::test(BackfillDashboard::class)
+        ->call('start', 'user-slugs')
+        ->call('runAnyway')
+        ->assertSee('guards overridden')
+        ->assertSet('confirming', null);
+
+    Queue::assertPushed(RunBackfillJob::class, fn ($job) => $job->backfill === 'user-slugs'
+        && $job->force === true);
+});
+
+it('lets the confirmation be dismissed', function () {
+    Queue::fake();
+    User::seedUnslugged(10);
+    config()->set('backfill.guards.max_rows_without_confirmation', 5);
+
+    Livewire::test(BackfillDashboard::class)
+        ->call('start', 'user-slugs')
+        ->call('cancelConfirmation')
+        ->assertSet('confirming', null)
+        ->assertDontSee('Run anyway');
+
+    Queue::assertNothingPushed();
+});
+
+it('asks before resuming into a refusal too', function () {
+    Queue::fake();
+    User::seedUnslugged(10);
+    runBackfill(BackfillUserSlugs::class, ['maxBatches' => 1]);
+    config()->set('backfill.guards.max_rows_without_confirmation', 2);
+
+    Livewire::test(BackfillDashboard::class)
+        ->call('resume', 'user-slugs')
+        ->assertSet('confirming', 'user-slugs');
+
+    Queue::assertNothingPushed();
+});
+
+it('queues straight away when nothing objects', function () {
+    Queue::fake();
+    User::seedUnslugged(10);
+    config()->set('backfill.guards.max_rows_without_confirmation', 1000);
+
+    Livewire::test(BackfillDashboard::class)
+        ->call('start', 'user-slugs')
+        ->assertSet('confirming', null)
+        ->assertSee('Queued');
+
+    Queue::assertPushed(RunBackfillJob::class, fn ($job) => $job->force === false);
+});
+
 it('pauses a running backfill', function () {
     User::seedUnslugged(6);
     $run = runBackfill(BackfillUserSlugs::class, ['maxBatches' => 1]);

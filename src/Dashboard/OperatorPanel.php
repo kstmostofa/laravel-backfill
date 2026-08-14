@@ -7,9 +7,12 @@ use Kstmostofa\Backfill\Backfill;
 use Kstmostofa\Backfill\BackfillRegistry;
 use Kstmostofa\Backfill\Enums\RunStatus;
 use Kstmostofa\Backfill\Exceptions\BackfillNotFound;
+use Kstmostofa\Backfill\Exceptions\BackfillRefused;
 use Kstmostofa\Backfill\Jobs\RunBackfillJob;
 use Kstmostofa\Backfill\Models\BackfillRun;
 use Kstmostofa\Backfill\Parameters\ParameterBag;
+use Kstmostofa\Backfill\Runner\BackfillRunner;
+use Kstmostofa\Backfill\Runner\ProductionGuards;
 use Livewire\Component;
 use Throwable;
 
@@ -84,6 +87,19 @@ class OperatorPanel extends Component
             return;
         }
 
+        // Deliberately no "run anyway" here. An operator hitting a production
+        // guard means something is misconfigured — a missing ceiling on an id
+        // list, or a task exposed that should not have been. Overriding that
+        // is an engineer's decision, taken on the engineer's dashboard.
+        if ($refusal = $this->refusal($backfill, $result['values'])) {
+            $this->errors = [
+                'This task cannot run right now. Ask a developer to take a look.',
+                $refusal,
+            ];
+
+            return;
+        }
+
         try {
             RunBackfillJob::dispatch(
                 $backfill->name(),
@@ -151,6 +167,30 @@ class OperatorPanel extends Component
             RunStatus::Cancelled => 'Cancelled.',
             RunStatus::Pending => 'Queued, starting shortly.',
         };
+    }
+
+    /**
+     * The reason the production guards would refuse this run, or null. The
+     * parameters matter: an operator's collection() is usually scoped by the
+     * ids they pasted, so the row count is theirs, not the whole table's.
+     *
+     * @param  array<string, mixed>  $parameters
+     */
+    protected function refusal(Backfill $backfill, array $parameters): ?string
+    {
+        $guards = app(ProductionGuards::class);
+
+        try {
+            $guards->check(
+                $backfill->withParameters($parameters),
+                $guards->needsEstimate(false) ? app(BackfillRunner::class)->estimate($backfill) : null,
+                false,
+            );
+        } catch (BackfillRefused $e) {
+            return $e->getMessage();
+        }
+
+        return null;
     }
 
     protected function registry(): BackfillRegistry

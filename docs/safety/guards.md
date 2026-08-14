@@ -39,6 +39,20 @@ The value of this guard is catching the case where `collection()` is wrong — a
 
 Set it to `null` to disable. The row count is only performed when the guard is active and `--force` was not passed, so a disabled guard costs nothing.
 
+### From the dashboard
+
+`--force` has no keyboard on a web page, so the [dashboard](/features/dashboard) checks the guards *before* queueing anything. A run that would be refused stops and asks:
+
+> **Hold on — user-slugs**
+> Backfill [user-slugs] matches 8,000,000 rows, above the 1,000,000 row ceiling…
+> **[ Run anyway ]  [ Cancel ]**
+
+Nothing is queued until someone presses **Run anyway**, which dispatches the job with the override set. That is the same acknowledgement `--force` represents, just asked out loud.
+
+The check happens before dispatch on purpose. Queueing first and letting the guard throw inside the worker means the page still says "never run" while `failed_jobs` quietly fills with stack traces — the refusal is invisible to the person who pressed the button.
+
+The [operator panel](/features/operator-panel) deliberately has **no** override. An operator hitting a production guard means something is misconfigured — a missing ceiling on an id list, or a task exposed that should not have been — so they are told plainly and sent to a developer.
+
 ## Deploy freeze windows
 
 ```php

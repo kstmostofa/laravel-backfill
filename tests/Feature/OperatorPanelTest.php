@@ -88,6 +88,27 @@ it('will not run a backfill that was never exposed', function () {
     Queue::assertNothingPushed();
 });
 
+/**
+ * An operator hitting a production guard means something is misconfigured, so
+ * they get told plainly and sent to a developer — there is deliberately no
+ * "run anyway" here. Overriding a guard is an engineer's decision, taken on
+ * the engineer's dashboard.
+ */
+it('will not let an operator override a production guard', function () {
+    Queue::fake();
+    User::seedUnslugged(10);
+    config()->set('backfill.guards.max_rows_without_confirmation', 2);
+
+    Livewire::test(OperatorPanel::class)
+        ->call('select', 'order-refunds')
+        ->set('input.user_ids', '1,2,3')
+        ->call('run')
+        ->assertSee('Ask a developer to take a look')
+        ->assertDontSee('Run anyway');
+
+    Queue::assertNothingPushed();
+});
+
 it('describes progress in words rather than cursors', function () {
     User::seedUnslugged(6);
 

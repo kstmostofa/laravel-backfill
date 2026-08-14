@@ -7,11 +7,14 @@ use Kstmostofa\Backfill\Backfill;
 use Kstmostofa\Backfill\BackfillRegistry;
 use Kstmostofa\Backfill\Enums\RunStatus;
 use Kstmostofa\Backfill\Exceptions\BackfillNotFound;
+use Kstmostofa\Backfill\Exceptions\BackfillRefused;
 use Kstmostofa\Backfill\Jobs\RunBackfillJob;
 use Kstmostofa\Backfill\Models\BackfillRun;
 use Kstmostofa\Backfill\Models\BackfillRunBatch;
 use Kstmostofa\Backfill\Models\BackfillRunError;
+use Kstmostofa\Backfill\Runner\BackfillRunner;
 use Kstmostofa\Backfill\Runner\FailedRowRetrier;
+use Kstmostofa\Backfill\Runner\ProductionGuards;
 use Livewire\Component;
 use Throwable;
 
@@ -23,6 +26,11 @@ class BackfillDashboard extends Component
 
     public ?string $error = null;
 
+    /** The backfill waiting on an explicit "run anyway", if any. */
+    public ?string $confirming = null;
+
+    public ?string $confirmMessage = null;
+
     public function mount(?string $selected = null): void
     {
         $this->selected = $selected;
@@ -31,8 +39,7 @@ class BackfillDashboard extends Component
     public function select(?string $name): void
     {
         $this->selected = $name;
-        $this->flash = null;
-        $this->error = null;
+        $this->clearMessages();
     }
 
     /**
@@ -42,12 +49,75 @@ class BackfillDashboard extends Component
     public function start(string $name): void
     {
         $this->guarded($name, function (Backfill $backfill) {
-            RunBackfillJob::dispatch($backfill->name(), startedBy: $this->startedBy())
-                ->onConnection(config('backfill.queue.connection'))
-                ->onQueue(config('backfill.queue.queue'));
+            if ($refusal = $this->refusal($backfill)) {
+                // The row ceiling and the freeze window exist to make a human
+                // acknowledge something before it happens. On the command line
+                // that is --force; here it is this button. Dispatching without
+                // asking would only fail again in the worker, out of sight.
+                $this->confirming = $backfill->name();
+                $this->confirmMessage = $refusal;
 
-            $this->flash = "Queued [{$backfill->name()}].";
+                return;
+            }
+
+            $this->queue($backfill);
         });
+    }
+
+    /**
+     * Start a run that the production guards refused, now that someone has
+     * read what they were refusing and said yes.
+     */
+    public function runAnyway(): void
+    {
+        if ($this->confirming === null) {
+            return;
+        }
+
+        $name = $this->confirming;
+
+        $this->guarded($name, function (Backfill $backfill) {
+            $this->queue($backfill, force: true);
+            $this->flash = "Queued [{$backfill->name()}], guards overridden.";
+        });
+    }
+
+    public function cancelConfirmation(): void
+    {
+        $this->clearMessages();
+    }
+
+    /**
+     * The reason the production guards would refuse this run, or null.
+     */
+    protected function refusal(Backfill $backfill): ?string
+    {
+        $guards = app(ProductionGuards::class);
+
+        try {
+            $guards->check(
+                $backfill,
+                $guards->needsEstimate(false) ? app(BackfillRunner::class)->estimate($backfill) : null,
+                false,
+            );
+        } catch (BackfillRefused $e) {
+            return $e->getMessage();
+        }
+
+        return null;
+    }
+
+    protected function queue(Backfill $backfill, bool $force = false): void
+    {
+        RunBackfillJob::dispatch(
+            $backfill->name(),
+            startedBy: $this->startedBy(),
+            force: $force,
+        )
+            ->onConnection(config('backfill.queue.connection'))
+            ->onQueue(config('backfill.queue.queue'));
+
+        $this->flash ??= "Queued [{$backfill->name()}].";
     }
 
     public function pause(string $name): void
@@ -69,10 +139,14 @@ class BackfillDashboard extends Component
     public function resume(string $name): void
     {
         $this->guarded($name, function (Backfill $backfill) {
-            RunBackfillJob::dispatch($backfill->name(), startedBy: $this->startedBy())
-                ->onConnection(config('backfill.queue.connection'))
-                ->onQueue(config('backfill.queue.queue'));
+            if ($refusal = $this->refusal($backfill)) {
+                $this->confirming = $backfill->name();
+                $this->confirmMessage = $refusal;
 
+                return;
+            }
+
+            $this->queue($backfill);
             $this->flash = "Resuming [{$backfill->name()}] from its committed cursor.";
         });
     }
@@ -115,10 +189,17 @@ class BackfillDashboard extends Component
         });
     }
 
-    protected function guarded(string $name, callable $callback): void
+    protected function clearMessages(): void
     {
         $this->flash = null;
         $this->error = null;
+        $this->confirming = null;
+        $this->confirmMessage = null;
+    }
+
+    protected function guarded(string $name, callable $callback): void
+    {
+        $this->clearMessages();
 
         try {
             $callback(app(BackfillRegistry::class)->find($name));
