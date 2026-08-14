@@ -16,7 +16,9 @@ export default defineConfig({
     base: '/laravel-backfill/',
 
     head: [
-        ['meta', { name: 'theme-color', content: '#2f6feb' }],
+        // The same mark the dashboard uses, so both tabs agree.
+        ['link', { rel: 'icon', href: 'data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 32 32%22%3E%3Crect width=%2232%22 height=%2232%22 rx=%227%22 fill=%22%23ff2d20%22/%3E%3Cg fill=%22%23fff%22%3E%3Cellipse cx=%2216%22 cy=%229.5%22 rx=%228%22 ry=%223.1%22/%3E%3Cpath d=%22M8 13.2v3.6c0 1.7 3.6 3.1 8 3.1s8-1.4 8-3.1v-3.6c0 1.7-3.6 3.1-8 3.1s-8-1.4-8-3.1z%22/%3E%3Cpath d=%22M8 20.3v3.6c0 1.7 3.6 3.1 8 3.1s8-1.4 8-3.1v-3.6c0 1.7-3.6 3.1-8 3.1s-8-1.4-8-3.1z%22/%3E%3C/g%3E%3C/svg%3E' }],
+        ['meta', { name: 'theme-color', content: '#ff2d20' }],
         ['meta', { property: 'og:title', content: 'Laravel Backfill' }],
         [
             'meta',

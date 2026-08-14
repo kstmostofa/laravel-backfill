@@ -7,8 +7,11 @@
     <meta name="csrf-token" content="{{ csrf_token() }}">
     <title>@yield('title', 'Backfills')</title>
 
-    <link rel="icon"
-        href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🗄️</text></svg>">
+    {{-- The masthead mark, inlined so the tab matches the app without
+         publishing an asset. Solid rather than stroked: a three-line
+         outline turns to mush at 16px. --}}
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='7' fill='%23ff2d20'/><g fill='%23fff'><ellipse cx='16' cy='9.5' rx='8' ry='3.1'/><path d='M8 13.2v3.6c0 1.7 3.6 3.1 8 3.1s8-1.4 8-3.1v-3.6c0 1.7-3.6 3.1-8 3.1s-8-1.4-8-3.1z'/><path d='M8 20.3v3.6c0 1.7 3.6 3.1 8 3.1s8-1.4 8-3.1v-3.6c0 1.7-3.6 3.1-8 3.1s-8-1.4-8-3.1z'/></g></svg>">
+    <meta name="theme-color" content="#ff2d20">
 
     <style>
         :root {
