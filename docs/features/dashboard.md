@@ -2,7 +2,8 @@
 
 An optional Livewire dashboard for engineers: what exists, how each one is going, and the controls to drive them.
 
-![Backfill dashboard](/dashboard.svg)
+<img class="only-light" src="/screenshots/dash.png" alt="The backfill dashboard, showing three backfills with progress and status">
+<img class="only-dark" src="/screenshots/dash-dark.png" alt="The backfill dashboard in dark mode">
 
 ## Setup
 
@@ -47,6 +48,8 @@ The [operator panel](/features/operator-panel) has its own separate gate.
 Every discovered backfill with the status of its last run: progress bar, processed and failed counts, cursor, and a marker when a run's heartbeat has gone cold. It polls every three seconds.
 
 Selecting one opens a detail panel with throughput, batch count, who started it, heartbeat age, why it stopped if it stopped, a batch-duration sparkline, and the failed rows.
+
+<img class="shot" src="/screenshots/detail.png" alt="A run's detail panel: stats, batch-duration chart and failed rows">
 
 ## Actions
 

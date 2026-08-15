@@ -861,7 +861,10 @@
             margin-bottom: 5px;
         }
 
+        /* The hint is a <span>; without this it flows inline and the input
+           ends up sitting beside the help text instead of below the label. */
         label.field .hint {
+            display: block;
             color: var(--muted);
             font-size: 13px;
             margin-bottom: 8px;

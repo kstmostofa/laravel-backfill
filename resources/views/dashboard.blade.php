@@ -164,7 +164,7 @@
 
     @if ($this->run)
         @php($run = $this->run)
-        <div class="panel">
+        <div class="panel" id="run-detail">
             <div class="panel-head">
                 <x-backfill::icon name="gauge" :size="15" class="ico muted" />
                 <h2>{{ $run->backfill }} — run #{{ $run->id }}</h2>

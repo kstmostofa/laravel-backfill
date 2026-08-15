@@ -72,6 +72,11 @@ features:
     linkText: Testing
 ---
 
+## What it looks like
+
+<img class="only-light" src="/screenshots/dash.png" alt="The backfill dashboard: live progress, throughput and failed rows">
+<img class="only-dark" src="/screenshots/dash-dark.png" alt="The backfill dashboard in dark mode">
+
 ## Install
 
 ```bash

@@ -30,6 +30,21 @@ it('shows the declared inputs when a task is chosen', function () {
         ->assertSee('Up to 5');
 });
 
+it('opens straight onto a task when one is named', function () {
+    // ?task=order-refunds — so a link to "the thing you need to run" can be
+    // sent to whoever needs to run it.
+    Livewire::test(OperatorPanel::class, ['task' => 'order-refunds'])
+        ->assertSet('selected', 'order-refunds')
+        ->assertSee('User IDs')
+        ->assertSet('input.tone', 'formal');
+});
+
+it('ignores a task name that does not exist', function () {
+    Livewire::test(OperatorPanel::class, ['task' => 'no-such-task'])
+        ->assertSet('selected', null)
+        ->assertSee('Choose a task');
+});
+
 it('seeds the form with the declared defaults', function () {
     Livewire::test(OperatorPanel::class)
         ->call('select', 'order-refunds')

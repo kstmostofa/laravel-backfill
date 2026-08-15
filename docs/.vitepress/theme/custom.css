@@ -106,3 +106,24 @@
         letter-spacing: -0.03em;
     }
 }
+
+/* ---------------------------------------------------------------------------
+   Screenshots
+   --------------------------------------------------------------------------- */
+
+/* VitePress has no built-in light/dark image swap, so pair the two variants
+   and let the theme class decide which one renders. */
+.only-light { display: block; }
+.only-dark { display: none; }
+
+html.dark .only-light { display: none; }
+html.dark .only-dark { display: block; }
+
+.vp-doc img.shot,
+.vp-doc .only-light,
+.vp-doc .only-dark {
+    border: 1px solid var(--vp-c-divider);
+    border-radius: 10px;
+    margin: 20px 0;
+    width: 100%;
+}

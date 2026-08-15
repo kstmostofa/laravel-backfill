@@ -4,6 +4,9 @@ The reason teams keep this installed after the migration that prompted it is lon
 
 A developer marks a backfill available and declares what it needs. Support staff then run it themselves — paste a list of ids, press Run, watch a progress bar. No shell, no developer, no ticket, and no way to reach anything that was not deliberately exposed.
 
+<img class="only-light" src="/screenshots/operator.png" alt="The operator panel: choose a task, fill in the declared fields, press Run">
+<img class="only-dark" src="/screenshots/operator-dark.png" alt="The operator panel in dark mode">
+
 ## Exposing a backfill
 
 ```php

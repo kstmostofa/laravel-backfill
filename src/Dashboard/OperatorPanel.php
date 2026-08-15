@@ -36,6 +36,13 @@ class OperatorPanel extends Component
 
     public ?string $flash = null;
 
+    public function mount(?string $task = null): void
+    {
+        if ($task !== null) {
+            $this->select($task);
+        }
+    }
+
     public function select(?string $name): void
     {
         $this->selected = $name;
