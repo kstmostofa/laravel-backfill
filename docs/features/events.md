@@ -54,6 +54,7 @@ Event::listen(BackfillPaused::class, function (BackfillPaused $event) {
 | `StopReason` | Meaning |
 | --- | --- |
 | `MaxBatches` | A `--max-batches` slice finished |
+| `TimeLimit` | A queued slice reached `max_seconds_per_job` |
 | `CircuitBreaker` | Failures looked systemic |
 | `Throttle` | Replicas would not recover |
 | `Signal` | `SIGTERM` or `SIGINT` |

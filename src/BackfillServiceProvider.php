@@ -32,6 +32,7 @@ use Kstmostofa\Backfill\Runner\ProductionGuards;
 use Kstmostofa\Backfill\Runner\ShutdownSignals;
 use Kstmostofa\Backfill\Runner\Throttle;
 use Kstmostofa\Backfill\Support\MigrationGuard;
+use Laravel\Pulse\Livewire\Card;
 use Livewire\Livewire;
 use Livewire\LivewireServiceProvider;
 
@@ -109,7 +110,7 @@ class BackfillServiceProvider extends ServiceProvider
         Livewire::component('backfill-operator', OperatorPanel::class);
 
         // Add <livewire:backfill-pulse-card /> to your Pulse dashboard view.
-        if (class_exists(\Laravel\Pulse\Livewire\Card::class)) {
+        if (class_exists(Card::class)) {
             Livewire::component('backfill-pulse-card', BackfillsCard::class);
         }
 

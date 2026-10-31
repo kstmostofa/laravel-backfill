@@ -39,6 +39,8 @@ The value of this guard is catching the case where `collection()` is wrong — a
 
 Set it to `null` to disable. The row count is only performed when the guard is active and `--force` was not passed, so a disabled guard costs nothing.
 
+`--no-count` and the ceiling do not mix. Skipping the count would mean skipping the check, on exactly the tables too big to count, so while a ceiling is set `--no-count` is refused unless `--force` comes with it.
+
 ### From the dashboard
 
 `--force` has no keyboard on a web page, so the [dashboard](/features/dashboard) checks the guards *before* queueing anything. A run that would be refused stops and asks:

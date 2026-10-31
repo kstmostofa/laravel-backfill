@@ -1,16 +1,80 @@
 # Laravel Backfill
 
-Safe, resumable, one-off data backfills for Laravel.
+[![Tests](https://github.com/kstmostofa/laravel-backfill/actions/workflows/tests.yml/badge.svg)](https://github.com/kstmostofa/laravel-backfill/actions/workflows/tests.yml)
+[![Static analysis](https://github.com/kstmostofa/laravel-backfill/actions/workflows/static.yml/badge.svg)](https://github.com/kstmostofa/laravel-backfill/actions/workflows/static.yml)
+[![Latest version](https://img.shields.io/packagist/v/kstmostofa/laravel-backfill.svg)](https://packagist.org/packages/kstmostofa/laravel-backfill)
+[![Total downloads](https://img.shields.io/packagist/dt/kstmostofa/laravel-backfill.svg)](https://packagist.org/packages/kstmostofa/laravel-backfill)
+[![PHP version](https://img.shields.io/packagist/php-v/kstmostofa/laravel-backfill.svg)](https://packagist.org/packages/kstmostofa/laravel-backfill)
+[![License](https://img.shields.io/packagist/l/kstmostofa/laravel-backfill.svg)](LICENSE)
 
-Laravel gives you schema migrations for structure and queues for background work, but nothing for **data backfills** — filling a new column across 8M rows, recalculating values that were computed wrong, migrating a boolean into a roles table. So every team hand-rolls the same `chunk()` loop, and that loop is wrong in ways that only show up in production.
+**Data backfills you can kill.** Fill a new column across 8M rows, fix values that were computed wrong, or move a boolean into a roles table, then `kill -9` it half way through and resume to the exact same end state.
 
-This package is built around one invariant:
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/kstmostofa/laravel-backfill/main/docs/public/screenshots/dash-dark.png">
+  <img alt="The backfill dashboard: live progress, throughput, batch durations and failed rows" src="https://raw.githubusercontent.com/kstmostofa/laravel-backfill/main/docs/public/screenshots/dash.png">
+</picture>
+
+📖 **[Full documentation](https://kstmostofa.github.io/laravel-backfill/)** · [Changelog](CHANGELOG.md) · [Benchmarks](https://kstmostofa.github.io/laravel-backfill/guide/benchmarks)
+
+## Quick start
+
+```bash
+composer require kstmostofa/laravel-backfill
+php artisan migrate
+php artisan make:backfill BackfillUserSlugs
+```
+
+```php
+class BackfillUserSlugs extends Backfill
+{
+    public function collection(): Builder
+    {
+        return User::query()->whereNull('slug');
+    }
+
+    public function process($record): void
+    {
+        $record->update(['slug' => Str::slug($record->name)]);
+    }
+}
+```
+
+```bash
+php artisan backfill:run user-slugs --dry-run   # real diffs from rolled-back rows, zero writes
+php artisan backfill:run user-slugs --queue     # resumable, throttled, survives deploys
+```
+
+## Why not just `chunkById()`?
+
+Laravel's `chunkById()` and `lazyById()` already page by key instead of by offset, so they do not skip rows the way `chunk()` does. If your backfill takes two minutes and nobody minds starting over, use them.
+
+This package is for the backfills where starting over is not an option. Here is what you get on top of keyset paging:
+
+| | `chunkById()` in a command | Laravel Backfill |
+| --- | --- | --- |
+| Pages by key, never skips rows | ✅ | ✅ |
+| Resumes from where it stopped after a crash or deploy | ❌ starts again | ✅ cursor committed with each batch |
+| One bad row does not stop the run | ❌ | ✅ per-row savepoints, failures recorded |
+| Retry only the rows that failed | ❌ | ✅ `backfill:retry-failed` |
+| Cannot run twice at once | ❌ | ✅ database-backed run lock |
+| Dry run with real before-and-after diffs | ❌ | ✅ mail, jobs and HTTP intercepted |
+| Slows down when replicas fall behind | ❌ | ✅ adaptive throttling |
+| Pauses itself when most rows fail | ❌ | ✅ circuit breaker |
+| Pause, resume and status from the CLI or a dashboard | ❌ | ✅ |
+| Safe on the queue across deploys | ❌ one long job | ✅ short chained jobs |
+| Support staff can run it without a developer | ❌ | ✅ operator panel |
+
+### When not to use this
+
+A backfill that finishes in a minute, on a table nobody else is writing to, does not need any of this. A plain `chunkById()` in a one-off command is simpler.
+
+## The invariant
+
+Everything here is built around one rule:
 
 > **A backfill can be killed at any instant, restarted, and must arrive at the same end state — no duplicated side effects, no skipped rows.**
 
-Every design decision in here is downstream of that sentence.
-
-📖 **[Full documentation](https://kstmostofa.github.io/laravel-backfill/)** — this README is the tour; the docs go into why each guarantee holds and where it does not.
+The test suite holds the package to it with a real `SIGKILL`, not a simulated crash. See [the chaos test](#the-chaos-test).
 
 ## Installation
 
@@ -26,7 +90,7 @@ php artisan vendor:publish --tag=backfill-migrations
 php artisan vendor:publish --tag=backfill-config
 ```
 
-Requires PHP 8.2+ and Laravel 11, 12 or 13. Tested against MySQL 8.4, PostgreSQL 18 and SQLite.
+Requires PHP 8.2+ and Laravel 12 or 13. Tested against MySQL 8.4, PostgreSQL 18 and SQLite.
 
 ## Writing a backfill
 
@@ -75,7 +139,7 @@ php artisan backfill:cancel user-slugs          # stop for good; will not resume
 php artisan backfill:retry-failed user-slugs    # re-process only the rows that failed
 ```
 
-Useful flags on `backfill:run`: `--dry-run` and `--samples=`, `--queue` and `--batches-per-job=`, `--fresh` (ignore a resumable run), `--batch-size=`, `--sleep=`, `--max-batches=` (stop cleanly after N batches), `--no-count` (skip the up-front estimate on tables too big to count), `--force` (skip the production guards and confirmation).
+Useful flags on `backfill:run`: `--dry-run` and `--samples=`, `--queue` and `--batches-per-job=`, `--fresh` (ignore a resumable run), `--batch-size=`, `--sleep=`, `--max-batches=` (stop cleanly after N batches), `--no-count` (skip the up-front estimate on tables too big to count; needs `--force` while a row ceiling is set), `--force` (skip the production guards and confirmation).
 
 ## Running on the queue
 
@@ -83,7 +147,7 @@ Useful flags on `backfill:run`: `--dry-run` and `--samples=`, `--queue` and `--b
 php artisan backfill:run user-slugs --queue
 ```
 
-This dispatches a job that runs 25 batches and then queues the next one, rather than a single long-lived job. Short jobs are the whole point: a worker restart mid-deploy costs at most one batch, and the next job resumes from the committed cursor. Configure the connection, queue and slice size under `backfill.queue`.
+This dispatches a job that runs a slice, 25 batches or 45 seconds, whichever comes first, and then queues the next one, rather than a single long-lived job. Each job carries its own timeout, and a job the worker kills marks the run interrupted and sends the failure notification. Short jobs are the whole point: a worker restart mid-deploy costs at most one batch, and the next job resumes from the committed cursor. Configure the connection, queue and slice size under `backfill.queue`.
 
 The chain stops on its own when the backfill finishes — and, importantly, it also stops when the run pauses for a reason nobody asked for. A circuit-breaker or throttle pause would only trip again on the next job, so those need a human to look first. That distinction is what the `stop_code` on each run records.
 
@@ -258,7 +322,7 @@ Two limits worth knowing. HTTP interception only covers Laravel's HTTP client, s
 
 ## What it actually does for you
 
-**Keyset pagination, never OFFSET.** Laravel's `chunk()` pages with `LIMIT/OFFSET`. When your transform makes rows leave the result set — exactly what a self-excluding backfill does — the result set shrinks under the cursor and every offset jump skips as many rows as the last batch removed. Roughly half your table is silently missed. This package only ever does `WHERE id > ? ORDER BY id LIMIT ?`, and it is not configurable. Any ordering your `collection()` came with is stripped, because keyset pagination is only correct when the sort matches the cursor column.
+**Keyset pagination, never OFFSET.** Laravel's `chunk()` pages with `LIMIT/OFFSET`. When your transform makes rows leave the result set — exactly what a self-excluding backfill does — the result set shrinks under the cursor and every offset jump skips as many rows as the last batch removed. Roughly half your table is silently missed. `chunkById()` fixes this for a single uninterrupted pass. This package only ever does `WHERE id > ? ORDER BY id LIMIT ?` too, and it is not configurable — the difference is that the cursor survives the process. Any ordering your `collection()` came with is stripped, because keyset pagination is only correct when the sort matches the cursor column.
 
 **The cursor is written after the work, in the same transaction.** Each batch is one short transaction containing the row changes, the error records, and the cursor advance. They commit together or not at all, so the cursor can never claim work that was rolled back. Worst case on a crash is that one batch is redone — which is safe, because `collection()` is self-excluding.
 
@@ -291,7 +355,6 @@ The test then asserts the resumed run reaches **byte-for-byte the same end state
   ✓ it resumes after a SIGKILL to the identical end state                1.19s
   ✓ it leaves no work half-applied when killed inside a batch            1.11s
 
-  Tests:    60 passed (172 assertions)
 ```
 
 On MySQL and PostgreSQL this is a stronger test than it looks: killing the process drops its connection, and the server rolls back the in-flight transaction on its own. The resumed run has to agree with a rollback it never saw happen.
@@ -312,7 +375,7 @@ BACKFILL_DRIVER=pgsql composer test    # PostgreSQL 13+
 
 Connection details come from `BACKFILL_MYSQL_*` and `BACKFILL_PGSQL_*` environment variables; the defaults match a stock local MySQL and PostgreSQL with a `laravel_backfill_test` database. The chaos tests need the `pcntl` and `posix` extensions and skip themselves if either is missing.
 
-Verified green on all three: **245 tests, 554 assertions** against SQLite, MySQL 8.4 and PostgreSQL 18, with the SIGKILL chaos test running for real on each.
+CI runs the whole suite on every push against SQLite, MySQL 8.4 and PostgreSQL 18, across PHP 8.2 to 8.4 and Laravel 12 and 13, with the SIGKILL chaos test running for real on each engine.
 
 ### Why the savepoints are not optional
 
@@ -376,6 +439,8 @@ The helper defaults to a batch size of 2 so your tests exercise the real paginat
 | `guards.deploy_freeze` | disabled | Windows during which runs are refused |
 | `queue.connection` / `queue.queue` | `null` | Where `--queue` dispatches to |
 | `queue.batches_per_job` | `25` | Batches each queued job runs before chaining |
+| `queue.max_seconds_per_job` | `45` | Seconds after which a queued slice stops and chains |
+| `queue.timeout` | `85` | Each queued job's timeout; keep it below `retry_after` |
 | `notifications.enabled` | `false` | Notify on completion, failure and auto-pause |
 | `notifications.mail` | `null` | Address (or array) to email |
 | `notifications.slack_webhook` | `null` | Slack incoming webhook URL |
@@ -411,16 +476,11 @@ The helper defaults to a batch size of 2 so your tests exercise the real paginat
 
 Integer, UUID and ULID keys all round-trip: the cursor is stored as a string and cast back based on the model's key type.
 
-## Status: v0.4 — feature complete
+## Changelog
 
-Shipped and tested across SQLite, MySQL and PostgreSQL:
+See [CHANGELOG.md](CHANGELOG.md). The current release is 1.x; the 0.x milestones listed there were bundled into 1.0.0.
 
-- **v0.1** — the class and discovery, the keyset runner, cursor persistence, per-row error isolation, run/status/pause/resume/cancel, the run lock, graceful shutdown
-- **v0.2** — dry run with real diffs and side-effect interception, adaptive throttling on replication lag, `backfill:retry-failed`, statement and lock timeouts, transient-failure retries, the circuit breaker, production guards, and the optional per-batch audit trail
-- **v0.3** — the Livewire dashboard, `--queue` mode with self-chaining jobs, the eight lifecycle events, notifications, and run pruning
-- **v0.4** — the operator panel with declared parameters, ledger mode for external side effects, per-tenant cursors, and the Pulse card
-
-### Known limits
+## Known limits
 
 Rows inserted *behind* the cursor after it has passed are not picked up — that is inherent to keyset pagination, and a second run afterwards catches them. `backfill:status` does not yet report how many such rows exist.
 
@@ -432,6 +492,12 @@ Ledger mode picks a side. A crash between claiming a row and finishing it leaves
 
 `Backfill::fake()` with `assertCompleted` / `assertProcessed` / `assertNoFailures` is still not shipped — the facade name would collide with the `Backfill` base class, and that is worth resolving deliberately rather than in a rush. Use the `InteractsWithBackfills` trait in the meantime.
 
+## Contributing
+
+Issues, discussions and pull requests are welcome. See [CONTRIBUTING.md](CONTRIBUTING.md) for how to run the checks locally, and [SECURITY.md](SECURITY.md) for reporting a vulnerability.
+
+If this package saved you from a bad night, a ⭐ on GitHub helps other people find it.
+
 ## License
 
-MIT.
+MIT. See [LICENSE](LICENSE).

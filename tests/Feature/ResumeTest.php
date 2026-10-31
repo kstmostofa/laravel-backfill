@@ -1,5 +1,6 @@
 <?php
 
+use Illuminate\Support\Collection;
 use Kstmostofa\Backfill\Enums\RunStatus;
 use Kstmostofa\Backfill\Models\BackfillRun;
 use Kstmostofa\Backfill\Runner\BackfillRunner;
@@ -84,7 +85,7 @@ it('leaves a failed run resumable from its last committed cursor', function () {
     {
         public int $batchSize = 2;
 
-        public function afterBatch(\Illuminate\Support\Collection $rows, BackfillRun $run): void
+        public function afterBatch(Collection $rows, BackfillRun $run): void
         {
             if ($run->batch_count >= 1) {
                 throw new RuntimeException('database went away');

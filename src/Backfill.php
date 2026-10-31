@@ -6,6 +6,7 @@ use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Str;
 use Kstmostofa\Backfill\Models\BackfillRun;
+use Kstmostofa\Backfill\Parameters\Parameter;
 use Throwable;
 
 abstract class Backfill
@@ -71,7 +72,7 @@ abstract class Backfill
     /**
      * Inputs an operator supplies before the run. Read them with parameter().
      *
-     * @return array<int, \Kstmostofa\Backfill\Parameters\Parameter>
+     * @return array<int, Parameter>
      */
     public function parameters(): array
     {

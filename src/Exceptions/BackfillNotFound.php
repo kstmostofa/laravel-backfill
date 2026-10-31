@@ -9,7 +9,7 @@ class BackfillNotFound extends InvalidArgumentException
     /**
      * @param  array<int, string>  $known
      */
-    public static function named(string $name, array $known = []): static
+    public static function named(string $name, array $known = []): self
     {
         $message = "No backfill named [{$name}] was found.";
 
@@ -17,6 +17,6 @@ class BackfillNotFound extends InvalidArgumentException
             $message .= ' Known backfills: '.implode(', ', $known).'.';
         }
 
-        return new static($message);
+        return new self($message);
     }
 }

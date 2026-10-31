@@ -67,7 +67,7 @@ features:
 
   - icon: 🧪
     title: Tested where it counts
-    details: 258 tests green on SQLite, MySQL 8.4 and PostgreSQL 18, including a chaos test that forks and sends the child a real SIGKILL from inside a batch transaction.
+    details: The full suite runs in CI on SQLite, MySQL 8.4 and PostgreSQL 18, including a chaos test that forks and sends the child a real SIGKILL from inside a batch transaction.
     link: /advanced/testing
     linkText: Testing
 ---
@@ -118,8 +118,6 @@ The promise that you can kill a backfill at any moment is worth exactly as much 
    PASS  Tests\Chaos\HardKillTest
   ✓ it resumes after a SIGKILL to the identical end state                1.19s
   ✓ it leaves no work half-applied when killed inside a batch            1.11s
-
-  Tests:    245 passed (554 assertions)
 ```
 
 Green on SQLite, MySQL 8.4 and PostgreSQL 18, with the chaos test running for real on each.

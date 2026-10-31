@@ -1,0 +1,23 @@
+includes:
+    - vendor/larastan/larastan/extension.neon
+
+parameters:
+    level: 5
+    paths:
+        - src
+        - config
+        - database
+    tmpDir: build/phpstan
+
+    ignoreErrors:
+        # The package's views live under the backfill:: namespace, which is only
+        # registered once the service provider boots. Static analysis cannot see
+        # it, so every namespaced view name reads as an unknown view.
+        -
+            identifier: argument.type
+            message: '#view-string\|null, string given#'
+
+        # A trait shipped for users' own test suites; nothing inside src uses it.
+        -
+            identifier: trait.unused
+            path: src/Testing/InteractsWithBackfills.php

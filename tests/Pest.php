@@ -5,6 +5,7 @@ use Kstmostofa\Backfill\Models\BackfillRun;
 use Kstmostofa\Backfill\Runner\BackfillRunner;
 use Kstmostofa\Backfill\Runner\RunOptions;
 use Kstmostofa\Backfill\Tests\ChaosTestCase;
+use Kstmostofa\Backfill\Tests\Fixtures\User;
 use Kstmostofa\Backfill\Tests\TestCase;
 
 uses(TestCase::class)->in('Feature');
@@ -28,7 +29,7 @@ function runBackfill($backfill, array $options = []): BackfillRun
  */
 function userStateByName(): array
 {
-    return \Kstmostofa\Backfill\Tests\Fixtures\User::query()
+    return User::query()
         ->orderBy('name')
         ->get()
         ->mapWithKeys(fn ($user) => [$user->name => [

@@ -6,6 +6,7 @@ use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Prunable;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Support\Carbon;
 use Kstmostofa\Backfill\Enums\RunStatus;
 
 /**
@@ -25,9 +26,9 @@ use Kstmostofa\Backfill\Enums\RunStatus;
  * @property int $sleep_ms
  * @property bool $dry_run
  * @property string|null $started_by
- * @property \Illuminate\Support\Carbon|null $heartbeat_at
- * @property \Illuminate\Support\Carbon|null $started_at
- * @property \Illuminate\Support\Carbon|null $finished_at
+ * @property Carbon|null $heartbeat_at
+ * @property Carbon|null $started_at
+ * @property Carbon|null $finished_at
  * @property string|null $error
  * @property array|null $meta
  */
@@ -60,6 +61,9 @@ class BackfillRun extends Model
         return config('backfill.connection');
     }
 
+    /**
+     * @return HasMany<BackfillRunError, $this>
+     */
     public function errors(): HasMany
     {
         return $this->hasMany(BackfillRunError::class, 'run_id');
@@ -117,16 +121,44 @@ class BackfillRun extends Model
         return min(100.0, round($done / $this->total_estimate * 100, 1));
     }
 
+    /**
+     * Rows per second over the time the run was actually working. Time spent
+     * paused is left out, so a run paused overnight is not reported at a
+     * tenth of its real speed.
+     */
     public function throughputPerSecond(): ?float
     {
-        $end = $this->finished_at ?? $this->heartbeat_at ?? now();
-
         if (! $this->started_at) {
             return null;
         }
 
-        $seconds = max(1, $this->started_at->diffInSeconds($end));
+        $seconds = $this->activeSeconds();
 
-        return round($this->processed_count / $seconds, 1);
+        return round($this->processed_count / max(1, $seconds), 1);
+    }
+
+    /**
+     * Seconds spent running across every session of this run, including the
+     * one in progress.
+     */
+    public function activeSeconds(): int
+    {
+        $meta = $this->meta ?? [];
+
+        // Runs recorded before sessions were tracked fall back to wall time.
+        if (! isset($meta['active_seconds']) && ! isset($meta['session_started_at'])) {
+            $end = $this->finished_at ?? $this->heartbeat_at ?? now();
+
+            return (int) $this->started_at?->diffInSeconds($end);
+        }
+
+        $seconds = (int) ($meta['active_seconds'] ?? 0);
+
+        if (isset($meta['session_started_at'])) {
+            $end = ($this->heartbeat_at ?? now())->getTimestamp();
+            $seconds += max(0, $end - (int) $meta['session_started_at']);
+        }
+
+        return $seconds;
     }
 }

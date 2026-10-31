@@ -1,0 +1,23 @@
+name: Feature request
+description: Suggest something the package should do.
+labels: [enhancement]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: The problem
+      description: What are you trying to do, and where does the package get in the way? A real example helps more than a proposed API.
+    validations:
+      required: true
+
+  - type: textarea
+    id: idea
+    attributes:
+      label: What you have in mind
+      description: How you would like it to work, if you have an idea.
+
+  - type: textarea
+    id: today
+    attributes:
+      label: What you do today
+      description: Any workaround you are using in the meantime.

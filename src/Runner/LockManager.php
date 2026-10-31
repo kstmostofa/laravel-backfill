@@ -71,11 +71,19 @@ class LockManager
         return $this->table()->where('backfill', $backfill)->exists();
     }
 
+    public function heldBy(string $backfill, string $owner): bool
+    {
+        return $this->table()->where('backfill', $backfill)->where('owner', $owner)->exists();
+    }
+
     public function owner(): string
     {
         return gethostname().':'.getmypid();
     }
 
+    /**
+     * @phpstan-impure
+     */
     protected function insert(string $backfill, ?int $runId): bool
     {
         $now = now();

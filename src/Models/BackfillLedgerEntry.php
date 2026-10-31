@@ -3,13 +3,14 @@
 namespace Kstmostofa\Backfill\Models;
 
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Support\Carbon;
 
 /**
  * @property string $backfill
  * @property string $record_id
  * @property int|null $run_id
- * @property \Illuminate\Support\Carbon|null $claimed_at
- * @property \Illuminate\Support\Carbon|null $processed_at
+ * @property Carbon|null $claimed_at
+ * @property Carbon|null $processed_at
  */
 class BackfillLedgerEntry extends Model
 {

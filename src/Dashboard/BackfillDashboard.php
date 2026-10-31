@@ -18,6 +18,11 @@ use Kstmostofa\Backfill\Runner\ProductionGuards;
 use Livewire\Component;
 use Throwable;
 
+/**
+ * @property-read Collection<int, array{name: string, class: string, description: string, run: BackfillRun|null, stale: bool}> $rows
+ * @property-read BackfillRun|null $run
+ * @property-read array<int, array<string, mixed>> $sparkline
+ */
 class BackfillDashboard extends Component
 {
     public ?string $selected = null;
@@ -223,7 +228,7 @@ class BackfillDashboard extends Component
     }
 
     /**
-     * @return Collection<int, array<string, mixed>>
+     * @return Collection<int, array{name: string, class: string, description: string, run: BackfillRun|null, stale: bool}>
      */
     public function getRowsProperty(): Collection
     {

@@ -2,6 +2,7 @@
 
 namespace Kstmostofa\Backfill\DryRun;
 
+use Illuminate\Database\Connection;
 use Illuminate\Database\Eloquent\Builder;
 use Throwable;
 
@@ -42,6 +43,10 @@ class QueryPlan
             }
 
             $connection = $keyset->getConnection();
+
+            if (! $connection instanceof Connection) {
+                return static::unknown();
+            }
             $driver = $connection->getDriverName();
             $prefix = $driver === 'sqlite' ? 'EXPLAIN QUERY PLAN' : 'EXPLAIN';
 

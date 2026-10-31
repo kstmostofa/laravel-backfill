@@ -122,7 +122,7 @@ Rows genuinely processed and rolled back. More samples give a better duration es
 ],
 ```
 
-`max_rows_without_confirmation` set to `null` disables the ceiling and skips the row count entirely. `timezone` falls back to `app.timezone`. See [production guards](/safety/guards).
+`max_rows_without_confirmation` set to `null` disables the ceiling and skips the row count entirely. While a ceiling is set, `--no-count` is refused without `--force`, because the ceiling cannot be checked without the count. `timezone` falls back to `app.timezone`. See [production guards](/safety/guards).
 
 ## Queue mode
 
@@ -131,10 +131,12 @@ Rows genuinely processed and rolled back. More samples give a better duration es
     'connection' => null,
     'queue' => null,
     'batches_per_job' => 25,
+    'max_seconds_per_job' => 45,
+    'timeout' => 85,
 ],
 ```
 
-See [running on the queue](/features/queue).
+A queued slice ends after `batches_per_job` batches or `max_seconds_per_job` seconds, whichever comes first. `timeout` is each job's own timeout; keep it below your queue connection's `retry_after`. See [running on the queue](/features/queue).
 
 ## Notifications
 

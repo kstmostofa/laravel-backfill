@@ -4,6 +4,7 @@ use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Facades\DB;
 use Kstmostofa\Backfill\Backfill;
 use Kstmostofa\Backfill\Tests\Fixtures\Backfills\BackfillUserSlugs;
+use Kstmostofa\Backfill\Tests\Fixtures\Doc;
 use Kstmostofa\Backfill\Tests\Fixtures\User;
 
 /**
@@ -93,7 +94,7 @@ it('walks a string primary key in order', function () {
 
         public function collection(): Builder
         {
-            return \Kstmostofa\Backfill\Tests\Fixtures\Doc::query()->where('done', 0);
+            return Doc::query()->where('done', 0);
         }
 
         public function process($record): void

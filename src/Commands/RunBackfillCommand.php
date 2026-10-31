@@ -19,6 +19,7 @@ use Kstmostofa\Backfill\Parameters\ParameterBag;
 use Kstmostofa\Backfill\Runner\BackfillRunner;
 use Kstmostofa\Backfill\Runner\RunOptions;
 use Kstmostofa\Backfill\Runner\ThrottleDecision;
+use Symfony\Component\Console\Helper\ProgressBar;
 
 class RunBackfillCommand extends Command
 {
@@ -40,6 +41,9 @@ class RunBackfillCommand extends Command
         {--force : Skip the production guards and confirmation}';
 
     protected $description = 'Run a backfill, resuming from its last committed cursor';
+
+    /** Created on the first batch, once the row estimate is known. */
+    protected ?ProgressBar $bar = null;
 
     public function handle(BackfillRegistry $registry, BackfillRunner $runner, DryRunner $dryRunner): int
     {
@@ -85,8 +89,6 @@ class RunBackfillCommand extends Command
             return self::FAILURE;
         }
 
-        $bar = null;
-
         $options = new RunOptions(
             batchSize: $this->intOption('batch-size'),
             sleepMs: $this->intOption('sleep'),
@@ -97,32 +99,32 @@ class RunBackfillCommand extends Command
             force: (bool) $this->option('force'),
             parameters: $parameters,
             tenant: $this->option('tenant'),
-            onBatch: function (BackfillRun $run, int $count) use (&$bar) {
-                if ($bar === null && $run->total_estimate) {
-                    $bar = $this->output->createProgressBar($run->total_estimate);
-                    $bar->start();
+            onBatch: function (BackfillRun $run, int $count) {
+                if ($this->bar === null && $run->total_estimate) {
+                    $this->bar = $this->output->createProgressBar($run->total_estimate);
+                    $this->bar->start();
                 }
 
-                $bar?->advance($count);
+                $this->bar?->advance($count);
             },
-            onThrottle: function (ThrottleDecision $decision) use (&$bar) {
-                $bar?->clear();
+            onThrottle: function (ThrottleDecision $decision) {
+                $this->bar?->clear();
                 $this->components->warn($decision->reason);
-                $bar?->display();
+                $this->bar?->display();
             },
         );
 
         try {
             $run = $runner->run($backfill, $options);
         } catch (BackfillAlreadyRunning|BackfillRefused $e) {
-            $bar?->finish();
+            $this->bar?->finish();
             $this->newLine();
             $this->components->error($e->getMessage());
 
             return self::FAILURE;
         }
 
-        $bar?->finish();
+        $this->bar?->finish();
         $this->newLine(2);
 
         return $this->report($run);

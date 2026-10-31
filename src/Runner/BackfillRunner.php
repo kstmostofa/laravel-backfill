@@ -62,15 +62,16 @@ class BackfillRunner
             $runs[] = $this->run($backfill, new RunOptions(
                 batchSize: $options?->batchSize,
                 sleepMs: $options?->sleepMs,
-                fresh: $options?->fresh ?? false,
-                withoutEstimate: $options?->withoutEstimate ?? false,
+                fresh: $options->fresh ?? false,
+                withoutEstimate: $options->withoutEstimate ?? false,
                 maxBatches: $options?->maxBatches,
                 startedBy: $options?->startedBy,
-                force: $options?->force ?? false,
+                force: $options->force ?? false,
                 onBatch: $options?->onBatch,
                 onThrottle: $options?->onThrottle,
-                parameters: $options?->parameters ?? [],
+                parameters: $options->parameters ?? [],
                 tenant: (string) $tenant,
+                maxSeconds: $options?->maxSeconds,
             ));
         }
 
@@ -110,6 +111,12 @@ class BackfillRunner
             return $estimate;
         };
 
+        // Skipping the count must not quietly skip the ceiling it feeds. The
+        // tables too big to count are exactly the ones the ceiling is for.
+        if ($options->withoutEstimate && $this->guards->needsEstimate($options->force)) {
+            throw BackfillRefused::uncounted($backfill->name());
+        }
+
         $this->guards->check(
             $backfill,
             $this->guards->needsEstimate($options->force) ? $rowCount() : null,
@@ -147,6 +154,7 @@ class BackfillRunner
                 'heartbeat_at' => now(),
                 'finished_at' => null,
                 'error' => null,
+                'meta' => $this->startSession($run),
             ])->save();
 
             BackfillStarted::dispatch($run, $resumed);
@@ -217,6 +225,7 @@ class BackfillRunner
         $key = $run->key_name;
         $cursor = $this->castCursor($run->cursor, $backfill, $key);
         $batches = 0;
+        $startedAt = microtime(true);
 
         // Kept local: the throttle may shrink these for a while, and the run
         // row should still record what the operator actually asked for.
@@ -273,6 +282,16 @@ class BackfillRunner
 
             if ($options->maxBatches !== null && $batches >= $options->maxBatches) {
                 $this->pause($run, StopReason::MaxBatches, "Stopped after {$batches} batches as requested.");
+
+                return;
+            }
+
+            if ($options->maxSeconds !== null && (microtime(true) - $startedAt) >= $options->maxSeconds) {
+                $this->pause($run, StopReason::TimeLimit, sprintf(
+                    'Stopped after %d batches to stay inside the %ds time limit.',
+                    $batches,
+                    $options->maxSeconds,
+                ));
 
                 return;
             }
@@ -594,7 +613,7 @@ class BackfillRunner
 
     protected function finish(BackfillRun $run, RunStatus $status, ?string $error = null, ?string $reason = null, ?StopReason $code = null): void
     {
-        $meta = $run->meta ?? [];
+        $meta = $this->closeSession($run->meta ?? [], now()->getTimestamp());
 
         if ($reason !== null) {
             $meta['stop_reason'] = $reason;
@@ -613,6 +632,47 @@ class BackfillRunner
             'heartbeat_at' => now(),
             'finished_at' => $status === RunStatus::Paused ? null : now(),
         ])->save();
+    }
+
+    /**
+     * Mark the start of a working session, so throughput can be measured
+     * over the time the run actually spent running rather than the days it
+     * may have sat paused in between.
+     *
+     * A session left open by a process that was killed is closed at its last
+     * heartbeat, which is the last moment it is known to have been working.
+     *
+     * @return array<string, mixed>
+     */
+    protected function startSession(BackfillRun $run): array
+    {
+        $meta = $run->meta ?? [];
+
+        if (isset($meta['session_started_at'])) {
+            $meta = $this->closeSession($meta, $run->heartbeat_at?->getTimestamp() ?? (int) $meta['session_started_at']);
+        }
+
+        $meta['session_started_at'] = now()->getTimestamp();
+
+        return $meta;
+    }
+
+    /**
+     * @param  array<string, mixed>  $meta
+     * @return array<string, mixed>
+     */
+    protected function closeSession(array $meta, int $endedAt): array
+    {
+        if (! isset($meta['session_started_at'])) {
+            return $meta;
+        }
+
+        $meta['active_seconds'] = (int) ($meta['active_seconds'] ?? 0)
+            + max(0, $endedAt - (int) $meta['session_started_at']);
+
+        unset($meta['session_started_at']);
+
+        return $meta;
     }
 
     protected function applyTimeouts(): void

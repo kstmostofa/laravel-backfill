@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Question or idea
+    url: https://github.com/kstmostofa/laravel-backfill/discussions
+    about: Ask how to do something, or float an idea before it becomes an issue.
+  - name: Documentation
+    url: https://kstmostofa.github.io/laravel-backfill/
+    about: Most questions are answered here.

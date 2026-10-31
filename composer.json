@@ -3,12 +3,20 @@
     "description": "Safe, resumable, one-off data backfills for Laravel. Keyset pagination, atomic cursor persistence, per-row error isolation, and crash recovery for bulk data changes over large tables.",
     "keywords": [
         "laravel",
+        "laravel-package",
         "backfill",
         "data-migration",
         "database",
         "batch",
-        "chunking"
+        "batch-processing",
+        "chunking",
+        "keyset-pagination",
+        "resumable",
+        "mysql",
+        "postgresql",
+        "eloquent"
     ],
+    "homepage": "https://kstmostofa.github.io/laravel-backfill/",
     "license": "MIT",
     "authors": [
         {
@@ -17,16 +25,21 @@
             "homepage": "https://github.com/kstmostofa"
         }
     ],
+    "support": {
+        "issues": "https://github.com/kstmostofa/laravel-backfill/issues",
+        "source": "https://github.com/kstmostofa/laravel-backfill",
+        "docs": "https://kstmostofa.github.io/laravel-backfill/"
+    },
     "require": {
         "php": "^8.2",
-        "illuminate/console": "^11.0|^12.0|^13.0",
-        "illuminate/database": "^11.0|^12.0|^13.0",
-        "illuminate/support": "^11.0|^12.0|^13.0"
+        "laravel/framework": "^12.0|^13.0"
     },
     "require-dev": {
+        "larastan/larastan": "^3.13",
+        "laravel/pint": "^1.13",
         "laravel/pulse": "^1.8",
         "livewire/livewire": "^3.0|^4.0",
-        "orchestra/testbench": "^9.0|^10.0|^11.0",
+        "orchestra/testbench": "^10.0|^11.0",
         "pestphp/pest": "^3.0|^4.0",
         "pestphp/pest-plugin-laravel": "^3.0|^4.0"
     },
@@ -51,7 +64,10 @@
         }
     },
     "scripts": {
-        "test": "vendor/bin/pest"
+        "test": "vendor/bin/pest",
+        "analyse": "vendor/bin/phpstan analyse --memory-limit=1G",
+        "format": "vendor/bin/pint",
+        "lint": "vendor/bin/pint --test"
     },
     "config": {
         "sort-packages": true,

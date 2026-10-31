@@ -5,10 +5,11 @@ use Kstmostofa\Backfill\Models\BackfillRun;
 use Kstmostofa\Backfill\Pulse\BackfillsCard;
 use Kstmostofa\Backfill\Tests\Fixtures\Backfills\BackfillUserSlugs;
 use Kstmostofa\Backfill\Tests\Fixtures\User;
+use Laravel\Pulse\Livewire\Card;
 use Livewire\Livewire;
 
 beforeEach(function () {
-    if (! class_exists(\Laravel\Pulse\Livewire\Card::class)) {
+    if (! class_exists(Card::class)) {
         $this->markTestSkipped('Laravel Pulse is not installed.');
     }
 

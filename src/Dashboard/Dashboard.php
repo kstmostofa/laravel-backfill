@@ -4,6 +4,7 @@ namespace Kstmostofa\Backfill\Dashboard;
 
 use Closure;
 use Illuminate\Http\Request;
+use Livewire\Livewire;
 
 /**
  * Who is allowed to see and drive backfills from the browser.
@@ -66,7 +67,7 @@ class Dashboard
     public static function enabled(): bool
     {
         return (bool) config('backfill.dashboard.enabled', false)
-            && class_exists(\Livewire\Livewire::class);
+            && class_exists(Livewire::class);
     }
 
     public static function path(): string

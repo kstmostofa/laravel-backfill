@@ -41,7 +41,7 @@ class ListBackfillsCommand extends Command
                     $run ? $run->status->label() : '—',
                     $run ? number_format($run->processed_count) : '—',
                     $run ? number_format($run->failed_count) : '—',
-                    $run?->cursor ?? '—',
+                    $run->cursor ?? '—',
                 ];
             })->all()
         );
