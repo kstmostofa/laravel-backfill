@@ -27,6 +27,15 @@ export default defineConfig({
                 content: 'Safe, resumable, one-off data backfills for Laravel.',
             },
         ],
+        // Shown when a docs link is shared. The same image is the GitHub repo's
+        // social preview.
+        ['meta', { property: 'og:type', content: 'website' }],
+        ['meta', { property: 'og:url', content: 'https://kstmostofa.github.io/laravel-backfill/' }],
+        ['meta', { property: 'og:image', content: 'https://kstmostofa.github.io/laravel-backfill/social-preview.png' }],
+        ['meta', { property: 'og:image:width', content: '1280' }],
+        ['meta', { property: 'og:image:height', content: '640' }],
+        ['meta', { name: 'twitter:card', content: 'summary_large_image' }],
+        ['meta', { name: 'twitter:image', content: 'https://kstmostofa.github.io/laravel-backfill/social-preview.png' }],
     ],
 
     themeConfig: {
