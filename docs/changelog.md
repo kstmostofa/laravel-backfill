@@ -1,6 +1,36 @@
 # Changelog
 
-## v0.4
+## v1.1.0
+
+Released 2026-11-01. Fixes for queue mode under real workers, a tighter row-ceiling guard, and static analysis in CI.
+
+**Queue mode**
+
+- **Queued slices are time-boxed.** A slice now ends after `batches_per_job` batches or `max_seconds_per_job` seconds, whichever comes first, so a slow `process()` can no longer outlive the worker timeout. The new `time_limit` stop code chains like `max_batches`.
+- **Jobs carry their own timeout.** `RunBackfillJob` sets `$timeout` from `backfill.queue.timeout` and turns on `failOnTimeout`.
+- **A killed job is reported, not lost.** Its `failed()` hook marks the run `interrupted`, releases the lock, and fires `BackfillFailed`, so notifications go out. Before, the run sat at `running` until its heartbeat went stale and nobody was told.
+- **The worker's own shutdown handling is preserved.** The runner used to replace `queue:work`'s `SIGTERM` handler and then reset it to the default. The worker never learned it should quit, and after the job the next `SIGTERM` killed it mid-job. The previous handler is now called alongside the runner's and restored afterwards.
+
+**Guards and retries**
+
+- **`--no-count` no longer bypasses the row ceiling.** While `max_rows_without_confirmation` is set, skipping the count is refused without `--force`.
+- **`backfill:retry-failed` is tenant-aware.** It takes the same per-tenant lock as the runner, switches into the run's tenant, and re-applies the run's parameters.
+
+**Dashboard**
+
+- **Throughput leaves out paused time.** Runs record active seconds per session, so a run paused overnight is no longer shown at a fraction of its real speed.
+
+**Housekeeping**
+
+- **Laravel 11 is no longer supported.** It stopped receiving security fixes in March 2026, and Composer now refuses to install its releases by default because of the open advisories. Laravel 12 and 13 are supported.
+- Requires `laravel/framework` rather than three `illuminate/*` components. The package always used parts only the full framework ships.
+- PHPStan (Larastan, level 5) and Pint run in CI.
+
+## v1.0.0
+
+The first tagged release. It bundles four milestones, listed below in the order they were built.
+
+### v0.4
 
 The operator panel, ledger mode, per-tenant cursors, and the Pulse card.
 
@@ -11,7 +41,7 @@ The operator panel, ledger mode, per-tenant cursors, and the Pulse card.
 - **[Pulse card](/features/pulse)** — in-flight and troubled runs, failed first, deliberately outside Pulse's period filter.
 - `--param` and `--tenant` on `backfill:run`.
 
-## v0.3
+### v0.3
 
 The dashboard, queue mode, events and notifications.
 
@@ -21,7 +51,7 @@ The dashboard, queue mode, events and notifications.
 - **[Notifications](/features/notifications)** on completion, failure and automatic pause. An operator pausing on purpose is never notified.
 - Finished runs prunable via `model:prune`.
 
-## v0.2
+### v0.2
 
 Dry run, throttling, retries, the circuit breaker and production guards.
 
@@ -33,7 +63,7 @@ Dry run, throttling, retries, the circuit breaker and production guards.
 - **[Production guards](/safety/guards)** — row ceiling, deploy freeze windows.
 - `backfill:retry-failed`, and an optional per-batch audit trail.
 
-## v0.1
+### v0.1
 
 The MVP.
 

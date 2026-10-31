@@ -25,12 +25,23 @@ class FailedRowRetrier
      */
     public function retry(Backfill $backfill, BackfillRun $run, ?int $limit = null): array
     {
-        $this->locks->acquire($backfill->name(), $run->id);
+        // Same key the runner uses, so a retry cannot overlap a live run of
+        // the same tenant — and does not block every other tenant either.
+        $key = $run->tenant === null ? $backfill->name() : $backfill->name().':'.$run->tenant;
+
+        $this->locks->acquire($key, $run->id);
 
         try {
+            if ($run->tenant !== null) {
+                $backfill->useTenant($run->tenant);
+            }
+
+            // Retried rows are processed under the inputs the run started with.
+            $backfill->withParameters($run->meta['parameters'] ?? []);
+
             return $this->process($backfill, $run, $limit);
         } finally {
-            $this->locks->release($backfill->name());
+            $this->locks->release($key);
         }
     }
 

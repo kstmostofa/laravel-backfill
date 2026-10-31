@@ -36,6 +36,19 @@ Roughly **half the table is silently missed**. No error, no warning, and a `coun
 
 [Keyset pagination](/safety/keyset-pagination) is the fix, and this package will not let you do it any other way.
 
+## What about `chunkById()`?
+
+Laravel ships the fix for that bug already. `chunkById()` and `lazyById()` page by key rather than by offset, so they never skip rows. For a backfill that takes a couple of minutes, use them and move on.
+
+What they do not give you is everything around the loop:
+
+- **No cursor survives the process.** If it dies at row four million, the next attempt walks the first four million again.
+- **One exception ends the run.** There is no record of which row failed, and no way to retry just that row.
+- **Nothing stops two copies running at once,** or one running inside a deploy freeze.
+- **No dry run, no throttle on replication lag, no pause, no status.**
+
+This package is keyset pagination plus all of that, built so a hard kill at any moment costs at most one batch.
+
 ## The one invariant
 
 Everything here is downstream of one sentence:
@@ -61,7 +74,7 @@ It is also load-bearing in the test suite: the chaos test forks a process and ha
 | | |
 | --- | --- |
 | PHP | 8.2+ |
-| Laravel | 11, 12 or 13 |
+| Laravel | 12 or 13 |
 | Databases | MySQL 8 / MariaDB, PostgreSQL 13+, SQLite |
 | Optional | `livewire/livewire` for the dashboards, `laravel/pulse` for the card |
 

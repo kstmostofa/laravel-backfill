@@ -13,6 +13,7 @@ namespace Kstmostofa\Backfill\Enums;
 enum StopReason: string
 {
     case MaxBatches = 'max_batches';
+    case TimeLimit = 'time_limit';
     case CircuitBreaker = 'circuit_breaker';
     case Throttle = 'throttle';
     case Signal = 'signal';
@@ -23,6 +24,6 @@ enum StopReason: string
      */
     public function isAutomaticallyResumable(): bool
     {
-        return $this === self::MaxBatches;
+        return $this === self::MaxBatches || $this === self::TimeLimit;
     }
 }

@@ -55,7 +55,7 @@ it('records an estimate of the work up front', function () {
 it('can skip the estimate for tables too big to count', function () {
     User::seedUnslugged(3);
 
-    $run = runBackfill(BackfillUserSlugs::class, ['withoutEstimate' => true]);
+    $run = runBackfill(BackfillUserSlugs::class, ['withoutEstimate' => true, 'force' => true]);
 
     expect($run->total_estimate)->toBeNull()
         ->and($run->status)->toBe(RunStatus::Completed)
@@ -99,4 +99,26 @@ it('is safe to run twice — the second pass finds nothing to do', function () {
 
     expect($second->processed_count)->toBe(0)
         ->and(User::where('process_count', 1)->count())->toBe(4);
+});
+
+it('leaves paused time out of the throughput', function () {
+    $run = new BackfillRun;
+    $run->forceFill([
+        'processed_count' => 1000,
+        'started_at' => now()->subDays(2),
+        'finished_at' => now(),
+        'meta' => ['active_seconds' => 10],
+    ]);
+
+    expect($run->throughputPerSecond())->toBe(100.0);
+});
+
+it('records active time across sessions', function () {
+    User::seedUnslugged(6);
+
+    runBackfill(BackfillUserSlugs::class, ['batchSize' => 2, 'maxBatches' => 1]);
+    $run = runBackfill(BackfillUserSlugs::class, ['batchSize' => 2]);
+
+    expect($run->meta)->toHaveKey('active_seconds')
+        ->and($run->meta)->not->toHaveKey('session_started_at');
 });

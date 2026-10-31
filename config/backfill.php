@@ -149,14 +149,21 @@ return [
     |--------------------------------------------------------------------------
     | Queued Runs
     |--------------------------------------------------------------------------
-    | `backfill:run --queue` dispatches a job that runs batches_per_job batches
-    | and then queues itself again. Short jobs are the point: a worker restart
+    | `backfill:run --queue` dispatches a job that runs a slice of batches and
+    | then queues itself again. Short jobs are the point: a worker restart
     | mid-deploy costs one batch, and the next job resumes from the cursor.
+    |
+    | A slice ends after batches_per_job batches or max_seconds_per_job
+    | seconds, whichever comes first. timeout is the job's own timeout, and
+    | should sit below your queue connection's retry_after (90 by default)
+    | with room for one slow batch above max_seconds_per_job.
     */
     'queue' => [
         'connection' => null,
         'queue' => null,
         'batches_per_job' => 25,
+        'max_seconds_per_job' => 45,
+        'timeout' => 85,
     ],
 
     /*

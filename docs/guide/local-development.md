@@ -191,7 +191,7 @@ BACKFILL_DRIVER=pgsql composer test
 
 ## Why bother, when the suite is green
 
-The package's 245 tests run under Orchestra Testbench, which is a real Laravel application — but not *your* Laravel application. Building this testbed immediately surfaced two bugs the suite could not have caught:
+The package's test suite runs under Orchestra Testbench, which is a real Laravel application — but not *your* Laravel application. Building this testbed immediately surfaced two bugs the suite could not have caught:
 
 **Laravel's console output strips `U+2192`.** The dry run's diff was built with a `→` between the before and after values. In Testbench assertions the string is compared in memory, so it passed; printed through Artisan in a real app, the arrow vanished and rows rendered as `slug: null user-1`. Em dash, ellipsis, bullet and check mark all survive — only that one character is affected. The fix was to use ASCII `->`.
 

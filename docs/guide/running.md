@@ -100,7 +100,7 @@ That re-processes **only** the recorded failures, rather than walking eight mill
 | `--batch-size=` | Override rows per batch |
 | `--sleep=` | Override the pause between batches |
 | `--max-batches=` | Stop cleanly after N batches |
-| `--no-count` | Skip the up-front `COUNT` on tables too big to count |
+| `--no-count` | Skip the up-front `COUNT` on tables too big to count. Needs `--force` while a row ceiling is set |
 | `--param=key=value` | Set a [declared parameter](/reference/parameters) |
 | `--tenant=` | Run one [tenant](/advanced/multi-tenancy) instead of all |
 | `--force` | Skip the production guards and confirmation |

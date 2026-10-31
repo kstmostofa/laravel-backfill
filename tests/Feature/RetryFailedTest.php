@@ -1,6 +1,12 @@
 <?php
 
+use Illuminate\Support\Facades\DB;
+use Kstmostofa\Backfill\Enums\RunStatus;
+use Kstmostofa\Backfill\Exceptions\BackfillAlreadyRunning;
+use Kstmostofa\Backfill\Models\BackfillRun;
 use Kstmostofa\Backfill\Models\BackfillRunError;
+use Kstmostofa\Backfill\Runner\FailedRowRetrier;
+use Kstmostofa\Backfill\Tests\Fixtures\Backfills\BackfillPerTenant;
 use Kstmostofa\Backfill\Tests\Fixtures\Backfills\BackfillWithFailingRow;
 use Kstmostofa\Backfill\Tests\Fixtures\User;
 
@@ -97,4 +103,59 @@ it('says so when there is nothing to retry', function () {
 it('fails when the backfill has never run', function () {
     $this->artisan('backfill:retry-failed', ['name' => 'user-slugs'])
         ->assertFailed();
+});
+
+function tenantRunWithOneFailure(string $tenant): BackfillRun
+{
+    $user = User::create(['name' => $tenant.'-1']);
+
+    $run = BackfillRun::create([
+        'backfill' => 'per-tenant',
+        'tenant' => $tenant,
+        'backfill_class' => BackfillPerTenant::class,
+        'status' => RunStatus::Completed,
+        'key_name' => 'id',
+        'batch_size' => 2,
+        'failed_count' => 1,
+    ]);
+
+    BackfillRunError::create([
+        'run_id' => $run->id,
+        'record_id' => (string) $user->id,
+        'exception_class' => RuntimeException::class,
+        'message' => 'boom',
+    ]);
+
+    return $run;
+}
+
+function holdLockElsewhere(string $key): void
+{
+    DB::table('backfill_locks')->insert([
+        'backfill' => $key,
+        'owner' => 'another-host:123',
+        'acquired_at' => now(),
+        'heartbeat_at' => now(),
+    ]);
+}
+
+it('retries one tenant while another tenant is running', function () {
+    BackfillPerTenant::reset();
+    $run = tenantRunWithOneFailure('globex');
+    holdLockElsewhere('per-tenant:acme');
+
+    $result = app(FailedRowRetrier::class)
+        ->retry(new BackfillPerTenant, $run);
+
+    expect($result['resolved'])->toBe(1)
+        ->and(BackfillPerTenant::$switchedTo)->toBe(['globex']);
+});
+
+it('will not retry a tenant whose run is still going', function () {
+    $run = tenantRunWithOneFailure('globex');
+    holdLockElsewhere('per-tenant:globex');
+
+    expect(fn () => app(FailedRowRetrier::class)
+        ->retry(new BackfillPerTenant, $run))
+        ->toThrow(BackfillAlreadyRunning::class);
 });

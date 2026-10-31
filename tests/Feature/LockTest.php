@@ -1,7 +1,9 @@
 <?php
 
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Kstmostofa\Backfill\Exceptions\BackfillAlreadyRunning;
+use Kstmostofa\Backfill\Models\BackfillRun;
 use Kstmostofa\Backfill\Runner\LockManager;
 use Kstmostofa\Backfill\Tests\Fixtures\Backfills\BackfillUserSlugs;
 use Kstmostofa\Backfill\Tests\Fixtures\User;
@@ -27,7 +29,7 @@ it('leaves no half-started run behind when it loses the race', function () {
 
     // A stray pending run here would make the next resume claim it was
     // continuing something, when nothing ever started.
-    expect(\Kstmostofa\Backfill\Models\BackfillRun::count())->toBe(0);
+    expect(BackfillRun::count())->toBe(0);
 });
 
 it('records which run owns the lock', function () {
@@ -41,7 +43,7 @@ it('records which run owns the lock', function () {
         },
     ]);
 
-    $runId = \Kstmostofa\Backfill\Models\BackfillRun::latest('id')->first()->id;
+    $runId = BackfillRun::latest('id')->first()->id;
 
     expect(array_unique($owners))->toBe([$runId]);
 });
@@ -71,7 +73,7 @@ it('releases the lock even when the run blows up', function () {
             throw new RuntimeException('boom');
         }
 
-        public function afterBatch(\Illuminate\Support\Collection $rows, \Kstmostofa\Backfill\Models\BackfillRun $run): void
+        public function afterBatch(Collection $rows, BackfillRun $run): void
         {
             throw new RuntimeException('boom');
         }

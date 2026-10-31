@@ -75,8 +75,8 @@ class DryRunner
             // printed at them.
             samples: array_slice($diffs, 0, $samples),
             sampleSeconds: $elapsed,
-            sideEffects: $sideEffects ?? [],
-            events: $events ?? [],
+            sideEffects: $sideEffects,
+            events: $events,
             batchSize: $backfill->resolvedBatchSize(),
             perRow: $backfill->hydrateModels,
             timedRows: $timed,
@@ -134,7 +134,7 @@ class DryRunner
      * extra SELECT per row that a real run never issues, and counting it would
      * make every estimate roughly twice what the job actually takes.
      *
-     * @return array{0: array<int, SampleDiff>, 1: float}
+     * @return array{0: array<int, SampleDiff>, 1: float, 2: int}
      */
     protected function processRows(Backfill $backfill, Collection $rows, string $key): array
     {
@@ -179,7 +179,7 @@ class DryRunner
     }
 
     /**
-     * @return array<int, SampleDiff>
+     * @return array{0: array<int, SampleDiff>, 1: float, 2: int}
      */
     protected function processWholeBatch(Backfill $backfill, Collection $rows, string $key): array
     {

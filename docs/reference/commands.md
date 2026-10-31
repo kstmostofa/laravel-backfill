@@ -34,7 +34,7 @@ Resumes the last resumable run, or starts a new one. Accepts the short name (`us
 | `--batch-size=` | Rows per batch |
 | `--sleep=` | Milliseconds between batches |
 | `--max-batches=` | Stop cleanly after N batches |
-| `--no-count` | Skip the up-front `COUNT` |
+| `--no-count` | Skip the up-front `COUNT`; needs `--force` while a row ceiling is set |
 | `--param=key=value` | Set a declared parameter; repeatable |
 | `--tenant=` | Run one tenant instead of all |
 | `--force` | Skip production guards and confirmation |

@@ -11,10 +11,14 @@ use Illuminate\Support\Facades\Log;
 use Kstmostofa\Backfill\BackfillRegistry;
 use Kstmostofa\Backfill\Enums\RunStatus;
 use Kstmostofa\Backfill\Enums\StopReason;
+use Kstmostofa\Backfill\Events\BackfillFailed;
 use Kstmostofa\Backfill\Exceptions\BackfillAlreadyRunning;
 use Kstmostofa\Backfill\Exceptions\BackfillRefused;
+use Kstmostofa\Backfill\Models\BackfillRun;
 use Kstmostofa\Backfill\Runner\BackfillRunner;
+use Kstmostofa\Backfill\Runner\LockManager;
 use Kstmostofa\Backfill\Runner\RunOptions;
+use Throwable;
 
 /**
  * Runs a slice of a backfill, then queues itself again for the next slice.
@@ -32,6 +36,20 @@ class RunBackfillJob implements ShouldQueue
 
     public int $tries = 1;
 
+    /**
+     * Seconds before the worker kills this job. Set from
+     * backfill.queue.timeout at dispatch, and kept below the queue
+     * connection's retry_after so a slow job is never handed to a second
+     * worker while the first is still on it.
+     */
+    public int $timeout = 85;
+
+    /**
+     * A job killed for running too long is a failure worth hearing about, not
+     * one to retry silently.
+     */
+    public bool $failOnTimeout = true;
+
     public function __construct(
         public readonly string $backfill,
         public readonly ?int $batchesPerJob = null,
@@ -42,7 +60,9 @@ class RunBackfillJob implements ShouldQueue
         /** @var array<string, mixed> */
         public readonly array $parameters = [],
         public readonly ?string $tenant = null,
-    ) {}
+    ) {
+        $this->timeout = max(1, (int) config('backfill.queue.timeout', 85));
+    }
 
     public function handle(BackfillRegistry $registry, BackfillRunner $runner): void
     {
@@ -53,6 +73,7 @@ class RunBackfillJob implements ShouldQueue
                 batchSize: $this->batchSize,
                 sleepMs: $this->sleepMs,
                 maxBatches: $this->batchesPerJob(),
+                maxSeconds: $this->maxSeconds(),
                 startedBy: $this->startedBy ?? 'queue',
                 force: $this->force,
                 parameters: $this->parameters,
@@ -115,6 +136,59 @@ class RunBackfillJob implements ShouldQueue
     protected function batchesPerJob(): int
     {
         return $this->batchesPerJob ?? (int) config('backfill.queue.batches_per_job', 25);
+    }
+
+    /**
+     * Stop the slice early when the batches turn out slower than expected, so
+     * a job finishes on its own long before the worker would kill it.
+     */
+    protected function maxSeconds(): ?int
+    {
+        $seconds = config('backfill.queue.max_seconds_per_job', 45);
+
+        return $seconds === null ? null : max(1, (int) $seconds);
+    }
+
+    /**
+     * Called when the worker gives up on this job — most often because it ran
+     * past its timeout and was killed. Without this, the run would sit at
+     * "running" until its heartbeat went cold, the chain would have quietly
+     * stopped, and nobody would be told.
+     */
+    public function failed(?Throwable $exception = null): void
+    {
+        $run = BackfillRun::query()
+            ->where('backfill', $this->backfill)
+            ->when($this->tenant === null,
+                fn ($query) => $query->whereNull('tenant'),
+                fn ($query) => $query->where('tenant', $this->tenant),
+            )
+            ->latest('id')
+            ->first();
+
+        if (! $run || $run->status !== RunStatus::Running) {
+            return;
+        }
+
+        $exception ??= new \RuntimeException('The queued backfill job failed.');
+
+        $run->forceFill([
+            'status' => RunStatus::Interrupted,
+            'error' => $exception->getMessage(),
+            'heartbeat_at' => now(),
+        ])->save();
+
+        // The process is about to die, so the runner's own finally block will
+        // never release the lock. Hand it back now rather than making the next
+        // attempt wait for the heartbeat to go stale.
+        $locks = app(LockManager::class);
+        $key = $this->tenant === null ? $this->backfill : $this->backfill.':'.$this->tenant;
+
+        if ($locks->heldBy($key, $locks->owner())) {
+            $locks->release($key);
+        }
+
+        BackfillFailed::dispatch($run, $exception);
     }
 
     /**

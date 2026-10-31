@@ -29,7 +29,7 @@ class Parameter
     /** @var array<string|int, string> */
     public array $options = [];
 
-    protected function __construct(
+    final protected function __construct(
         public readonly string $key,
         public readonly string $type,
         public string $label,

@@ -7,10 +7,12 @@ use Kstmostofa\Backfill\Backfill;
 use Kstmostofa\Backfill\DryRun\DryRunner;
 use Kstmostofa\Backfill\DryRun\DryRunReport;
 use Kstmostofa\Backfill\DryRun\QueryPlan;
+use Kstmostofa\Backfill\Exceptions\BackfillRefused;
 use Kstmostofa\Backfill\Models\BackfillRun;
 use Kstmostofa\Backfill\Tests\Fixtures\Backfills\BackfillUserSlugs;
 use Kstmostofa\Backfill\Tests\Fixtures\Backfills\BackfillWithFailingRow;
 use Kstmostofa\Backfill\Tests\Fixtures\Backfills\BackfillWithoutHydration;
+use Kstmostofa\Backfill\Tests\Fixtures\Tag;
 use Kstmostofa\Backfill\Tests\Fixtures\User;
 
 function dryRun($backfill, ?int $samples = null)
@@ -313,18 +315,18 @@ it('refuses to dry-run a backfill whose guard says no', function () {
     };
 
     expect(fn () => dryRun($backfill))
-        ->toThrow(\Kstmostofa\Backfill\Exceptions\BackfillRefused::class);
+        ->toThrow(BackfillRefused::class);
 });
 
 it('flags a cursor column with no index', function () {
     // bf_tags.name has no index, so paginating over it is a full scan.
-    \Kstmostofa\Backfill\Tests\Fixtures\Tag::seed(5);
+    Tag::seed(5);
 
     $backfill = new class extends Backfill
     {
         public function collection(): Builder
         {
-            return \Kstmostofa\Backfill\Tests\Fixtures\Tag::query()->whereNull('label');
+            return Tag::query()->whereNull('label');
         }
 
         public function keyName(): string

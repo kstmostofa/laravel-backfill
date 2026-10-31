@@ -5,6 +5,8 @@ namespace Kstmostofa\Backfill\Tests;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
 use Kstmostofa\Backfill\BackfillServiceProvider;
+use Laravel\Pulse\PulseServiceProvider;
+use Livewire\LivewireServiceProvider;
 use Orchestra\Testbench\TestCase as Orchestra;
 
 abstract class TestCase extends Orchestra
@@ -12,12 +14,12 @@ abstract class TestCase extends Orchestra
     protected function getPackageProviders($app): array
     {
         return array_filter([
-            class_exists(\Livewire\LivewireServiceProvider::class)
-                ? \Livewire\LivewireServiceProvider::class
+            class_exists(LivewireServiceProvider::class)
+                ? LivewireServiceProvider::class
                 : null,
             // Needed for the Pulse card's view namespace and x-pulse components.
-            class_exists(\Laravel\Pulse\PulseServiceProvider::class)
-                ? \Laravel\Pulse\PulseServiceProvider::class
+            class_exists(PulseServiceProvider::class)
+                ? PulseServiceProvider::class
                 : null,
             BackfillServiceProvider::class,
         ]);

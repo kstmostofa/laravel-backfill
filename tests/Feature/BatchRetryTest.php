@@ -1,6 +1,7 @@
 <?php
 
 use Kstmostofa\Backfill\Enums\RunStatus;
+use Kstmostofa\Backfill\Models\BackfillRun;
 use Kstmostofa\Backfill\Models\BackfillRunBatch;
 use Kstmostofa\Backfill\Support\TransientFailure;
 use Kstmostofa\Backfill\Tests\Fixtures\Backfills\BackfillThatDeadlocks;
@@ -70,7 +71,7 @@ it('gives up once the retries are exhausted', function () {
     // Two retries after the first attempt: three calls, three deadlocks.
     expect(BackfillThatDeadlocks::$deadlocksLeft)->toBe(96);
 
-    $run = \Kstmostofa\Backfill\Models\BackfillRun::latest('id')->first();
+    $run = BackfillRun::latest('id')->first();
 
     expect($run->status)->toBe(RunStatus::Failed)
         ->and($run->cursor)->toBeNull()

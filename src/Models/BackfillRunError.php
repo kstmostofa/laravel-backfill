@@ -4,6 +4,7 @@ namespace Kstmostofa\Backfill\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Support\Carbon;
 
 /**
  * @property int $id
@@ -13,7 +14,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
  * @property string $message
  * @property string|null $trace
  * @property int $attempts
- * @property \Illuminate\Support\Carbon|null $resolved_at
+ * @property Carbon|null $resolved_at
  */
 class BackfillRunError extends Model
 {

@@ -31,5 +31,11 @@ class RunOptions
         public array $parameters = [],
         /** Which tenant's cursor this run belongs to. */
         public ?string $tenant = null,
+        /**
+         * Stop cleanly once a batch commits after this many seconds. Queue mode
+         * uses it so every job fits inside the worker's timeout, however slow
+         * process() turns out to be.
+         */
+        public ?int $maxSeconds = null,
     ) {}
 }

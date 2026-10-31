@@ -23,6 +23,8 @@ use Throwable;
  * their declared parameters can be set, and every input is validated before a
  * job is queued. Someone can paste a list of order ids and watch a progress
  * bar; they cannot reach anything that was not deliberately exposed.
+ *
+ * @property-read BackfillRun|null $run
  */
 class OperatorPanel extends Component
 {

@@ -10,13 +10,15 @@ For anything measured in hours, this is how you should run it. Nothing depends o
 
 The obvious design is one job that runs the entire backfill. It is also the wrong one: a worker restart kills it, and everything since the last commit is lost while nothing re-queues it.
 
-Instead, each job runs a slice — 25 batches by default — and then queues the next one:
+Instead, each job runs a slice and then queues the next one. A slice ends after 25 batches or 45 seconds, whichever comes first:
 
 ```php
 'queue' => [
     'connection' => null,
     'queue' => null,
     'batches_per_job' => 25,
+    'max_seconds_per_job' => 45,
+    'timeout' => 85,
 ],
 ```
 
@@ -25,6 +27,22 @@ php artisan backfill:run user-slugs --queue --batches-per-job=50
 ```
 
 Short jobs mean a worker restart mid-deploy costs at most the batch in flight, and the next job picks up from the committed cursor without anyone intervening.
+
+## Fitting inside the worker timeout
+
+A batch count alone cannot promise a short job. Twenty-five batches of a `process()` that calls an API can take ten minutes, and the worker kills any job that outlives its timeout.
+
+So each slice also has a time limit. Once a batch commits after `max_seconds_per_job`, the job stops and chains the next one. The job's own `timeout` is set from config, and `failOnTimeout` is on.
+
+Keep the numbers in this order:
+
+```
+max_seconds_per_job  +  one slow batch  <  timeout  <  retry_after
+```
+
+`retry_after` belongs to your queue connection in `config/queue.php` and defaults to 90 seconds. A job that outlives it is handed to a second worker while the first is still running. The run lock stops the second one doing any harm, but it is noise you do not want.
+
+If the worker does kill a job, its `failed()` hook marks the run `interrupted`, releases the lock, and fires `BackfillFailed`, so a notification goes out. Resume it once you have raised the timeout or shrunk the batch.
 
 ## When the chain stops
 
@@ -35,6 +53,7 @@ Every pause records a machine-readable `stop_code` alongside the human sentence:
 | `stop_code` | Meaning | Chains? |
 | --- | --- | --- |
 | `max_batches` | This job's slice finished | **Yes** |
+| `time_limit` | This job's slice ran out of time | **Yes** |
 | `circuit_breaker` | Failures look systemic | No |
 | `throttle` | Replicas will not recover | No |
 | `signal` | The worker got `SIGTERM` | No |
@@ -52,7 +71,9 @@ This makes queue mode safe on a multi-worker setup without any coordination on y
 
 ## Deploys
 
-Laravel's worker sends `SIGTERM` on restart. The runner traps it, finishes the batch in flight, commits its cursor, and marks the run paused with `stop_code: signal`.
+A deploy usually stops workers with `SIGTERM`. The runner traps it, finishes the batch in flight, commits its cursor, and marks the run paused with `stop_code: signal`.
+
+The worker's own `SIGTERM` handler still runs alongside the runner's, and is put back when the run ends. The worker therefore exits once the job returns, exactly as it would without a backfill in it.
 
 That does mean the chain stops on a deploy. Resume it afterwards:
 
@@ -77,6 +98,8 @@ Give backfills their own queue if you do not want a long chain competing with us
     'connection' => 'redis',
     'queue' => 'backfills',
     'batches_per_job' => 25,
+    'max_seconds_per_job' => 45,
+    'timeout' => 85,
 ],
 ```
 

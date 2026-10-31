@@ -2,6 +2,7 @@
 
 namespace Kstmostofa\Backfill\DryRun;
 
+use Illuminate\Mail\Transport\ArrayTransport;
 use Illuminate\Support\Facades\Bus;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Http;
@@ -112,7 +113,11 @@ class SideEffectRecorder
     protected function countMail(): int
     {
         try {
-            return Mail::mailer(self::MAILER)->getSymfonyTransport()->messages()->count();
+            $transport = Mail::mailer(self::MAILER)->getSymfonyTransport();
+
+            return $transport instanceof ArrayTransport
+                ? $transport->messages()->count()
+                : 0;
         } catch (Throwable) {
             return 0;
         }

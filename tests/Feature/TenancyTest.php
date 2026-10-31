@@ -1,8 +1,10 @@
 <?php
 
 use Kstmostofa\Backfill\Enums\RunStatus;
+use Kstmostofa\Backfill\Exceptions\BackfillAlreadyRunning;
 use Kstmostofa\Backfill\Models\BackfillRun;
 use Kstmostofa\Backfill\Runner\BackfillRunner;
+use Kstmostofa\Backfill\Runner\LockManager;
 use Kstmostofa\Backfill\Runner\RunOptions;
 use Kstmostofa\Backfill\Tests\Fixtures\Backfills\BackfillPerTenant;
 use Kstmostofa\Backfill\Tests\Fixtures\Backfills\BackfillUserSlugs;
@@ -73,7 +75,7 @@ it('keeps one tenant\'s failure away from another', function () {
 });
 
 it('locks tenants independently so they could run side by side', function () {
-    app(\Kstmostofa\Backfill\Runner\LockManager::class)->acquire('per-tenant:acme', 999);
+    app(LockManager::class)->acquire('per-tenant:acme', 999);
 
     // globex is a different lock, so it is free to run.
     $run = app(BackfillRunner::class)->run(new BackfillPerTenant, new RunOptions(tenant: 'globex'));
@@ -81,7 +83,7 @@ it('locks tenants independently so they could run side by side', function () {
     expect($run->processed_count)->toBe(2);
 
     expect(fn () => app(BackfillRunner::class)->run(new BackfillPerTenant, new RunOptions(tenant: 'acme')))
-        ->toThrow(\Kstmostofa\Backfill\Exceptions\BackfillAlreadyRunning::class);
+        ->toThrow(BackfillAlreadyRunning::class);
 });
 
 it('handles a tenant list that changes between runs', function () {

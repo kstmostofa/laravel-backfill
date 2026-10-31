@@ -131,3 +131,20 @@ it('does nothing when freezes are disabled', function () {
 
     expect(app(ProductionGuards::class)->activeFreezeWindow())->toBeNull();
 });
+
+it('refuses to skip the count when a ceiling needs it', function () {
+    config()->set('backfill.guards.max_rows_without_confirmation', 5);
+    User::seedUnslugged(10);
+
+    expect(fn () => runBackfill(BackfillUserSlugs::class, ['withoutEstimate' => true]))
+        ->toThrow(BackfillRefused::class, 'skip the row count');
+
+    expect(User::whereNull('slug')->count())->toBe(10);
+});
+
+it('skips the count freely when there is no ceiling', function () {
+    config()->set('backfill.guards.max_rows_without_confirmation', null);
+    User::seedUnslugged(3);
+
+    expect(runBackfill(BackfillUserSlugs::class, ['withoutEstimate' => true])->processed_count)->toBe(3);
+});

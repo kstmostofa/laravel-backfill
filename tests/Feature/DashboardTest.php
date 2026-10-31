@@ -6,6 +6,7 @@ use Kstmostofa\Backfill\Dashboard\Dashboard;
 use Kstmostofa\Backfill\Enums\RunStatus;
 use Kstmostofa\Backfill\Jobs\RunBackfillJob;
 use Kstmostofa\Backfill\Models\BackfillRun;
+use Kstmostofa\Backfill\Models\BackfillRunBatch;
 use Kstmostofa\Backfill\Tests\Fixtures\Backfills\BackfillUserSlugs;
 use Kstmostofa\Backfill\Tests\Fixtures\Backfills\BackfillWithFailingRow;
 use Kstmostofa\Backfill\Tests\Fixtures\User;
@@ -194,7 +195,7 @@ it('builds a sparkline scaled to the slowest batch', function () {
 
     // Six rows finish in well under a millisecond, so stamp known durations on
     // the recorded batches to check the scaling rather than the clock.
-    \Kstmostofa\Backfill\Models\BackfillRunBatch::where('run_id', $run->id)
+    BackfillRunBatch::where('run_id', $run->id)
         ->orderBy('id')
         ->get()
         ->each(fn ($batch, $i) => $batch->forceFill(['duration_ms' => [10, 40, 20][$i]])->save());
@@ -234,7 +235,7 @@ it('summarises the batch timings so the chart reads without hovering', function 
 
     $run = runBackfill(BackfillUserSlugs::class);
 
-    \Kstmostofa\Backfill\Models\BackfillRunBatch::where('run_id', $run->id)
+    BackfillRunBatch::where('run_id', $run->id)
         ->orderBy('id')
         ->get()
         ->each(fn ($batch, $i) => $batch->forceFill(['duration_ms' => [10, 40, 20][$i]])->save());
