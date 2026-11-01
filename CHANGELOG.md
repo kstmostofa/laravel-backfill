@@ -4,7 +4,7 @@ All notable changes to this package. The same notes, with working cross-links, a
 
 ## v1.2.0
 
-Unreleased.
+Released 2026-11-01. Run unfinished backfills after a deploy, and test code that starts them.
 
 - **`backfill:pending`** lists, runs or queues every backfill that has not finished, the way `migrate` handles migrations. Add `backfill:pending --queue --force` to a deploy script and new backfills run themselves. Paused runs resume from their cursor, finished ones are skipped. See [running after a deploy](https://kstmostofa.github.io/laravel-backfill/guide/running#running-after-a-deploy).
 - **`$manual`** keeps a backfill out of `backfill:pending`. Operator-panel backfills and ones with a required parameter are left out automatically.

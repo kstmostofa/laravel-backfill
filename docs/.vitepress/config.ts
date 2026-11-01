@@ -43,7 +43,7 @@ export default defineConfig({
             { text: 'Guide', link: '/guide/introduction' },
             { text: 'Reference', link: '/reference/commands' },
             {
-                text: 'v1.1',
+                text: 'v1.2',
                 items: [
                     { text: 'Changelog', link: '/changelog' },
                     {
