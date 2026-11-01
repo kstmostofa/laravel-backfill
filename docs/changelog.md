@@ -6,6 +6,8 @@ Unreleased.
 
 - **`backfill:pending`** lists, runs or queues every backfill that has not finished, the way `migrate` handles migrations. Add `backfill:pending --queue --force` to a deploy script and new backfills run themselves. Paused runs resume from their cursor, finished ones are skipped. See [running after a deploy](/guide/running#running-after-a-deploy).
 - **`$manual`** keeps a backfill out of `backfill:pending`. Operator-panel backfills and ones with a required parameter are left out automatically.
+- **`Backfills::fake()`** records runs without touching the data, for testing code that starts backfills. Assert with `assertRan`, `assertRanTimes`, `assertNotRan` and `assertNothingRan`. See [testing](/advanced/testing#testing-code-that-starts-backfills).
+- **Assertion helpers** on `InteractsWithBackfills`: `assertBackfillCompleted`, `assertBackfillProcessed` and `assertBackfillHasNoFailures`, with failure messages that name the stop reason or the first failed row.
 
 ## v1.1.0
 

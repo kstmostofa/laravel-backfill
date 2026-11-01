@@ -22,6 +22,18 @@ it('slugs every user', function () {
 
 The trait works in Pest and PHPUnit alike.
 
+## Assertion helpers
+
+The trait also adds three assertions with failure messages that say what went wrong:
+
+```php
+$run = $this->runBackfill(BackfillUserSlugs::class);
+
+$this->assertBackfillCompleted($run);      // otherwise: "ended as paused, not completed" and why
+$this->assertBackfillProcessed($run, 5);
+$this->assertBackfillHasNoFailures($run);  // otherwise: the first failed row, its exception and message
+```
+
 ## Use a small batch size
 
 The helper defaults to a batch size of **2**, on purpose.
@@ -82,6 +94,44 @@ expect($run->status)->toBe(RunStatus::Completed)
 ::: tip Make one failure a database error
 A row failing with a PHP exception and a row failing with a constraint violation take different paths on PostgreSQL. See [transactions and savepoints](/safety/transactions#the-subtlety-worth-knowing).
 :::
+
+## Testing code that starts backfills
+
+Sometimes the backfill is not what you are testing. A deploy command, a scheduled task or a controller starts one, and the test only needs to know that it did.
+
+Fake the runner. Every run is recorded, and nothing touches the data:
+
+```php
+use Kstmostofa\Backfill\Facades\Backfills;
+
+it('runs pending backfills on deploy', function () {
+    Backfills::fake();
+
+    $this->artisan('app:deploy')->assertSuccessful();
+
+    Backfills::assertRan('user-slugs');
+    Backfills::assertNotRan('order-refunds');
+});
+```
+
+The facade is `Backfills`, plural, because `Backfill` is the base class every backfill extends.
+
+| Assertion | |
+| --- | --- |
+| `assertRan($name, $callback = null)` | It ran at least once. The callback receives the backfill and its `RunOptions` |
+| `assertRanTimes($name, $times)` | It ran exactly this many times. A tenant backfill runs once per tenant |
+| `assertNotRan($name, $callback = null)` | It did not run, or no run matched the callback |
+| `assertNothingRan()` | No backfill ran at all |
+
+Names can be the short name, the class basename or the class name. The callback is the place to check inputs:
+
+```php
+Backfills::assertRan('order-refunds', fn ($backfill, $options) =>
+    $backfill->parameter('order_ids') === [1, 2, 3] && $options->tenant === 'acme'
+);
+```
+
+The fake replaces the runner wherever it is resolved: `backfill:run`, `backfill:pending`, and queued jobs once they execute. With `Queue::fake()` the job never executes, so assert on the queue instead.
 
 ## Testing parameters
 
