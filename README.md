@@ -420,7 +420,20 @@ it('slugs every user', function () {
 });
 ```
 
-The helper defaults to a batch size of 2 so your tests exercise the real pagination path, rather than a single batch that would hide ordering and cursor bugs. Pass `['batchSize' => n]` to override it, along with any other run option (`maxBatches`, `fresh`, `withoutEstimate`, `force`).
+The helper defaults to a batch size of 2 so your tests exercise the real pagination path, rather than a single batch that would hide ordering and cursor bugs. Pass `['batchSize' => n]` to override it, along with any other run option (`maxBatches`, `fresh`, `withoutEstimate`, `force`). The trait also adds `assertBackfillCompleted`, `assertBackfillProcessed` and `assertBackfillHasNoFailures`.
+
+To test code that starts a backfill, rather than the backfill itself, fake the runner. Runs are recorded and nothing touches the data:
+
+```php
+use Kstmostofa\Backfill\Facades\Backfills;
+
+Backfills::fake();
+
+$this->artisan('app:deploy');
+
+Backfills::assertRan('user-slugs');
+Backfills::assertNotRan('order-refunds');
+```
 
 ## Configuration
 
@@ -503,7 +516,6 @@ Throttling needs a lag signal it can actually read. On PostgreSQL it works from 
 
 Ledger mode picks a side. A crash between claiming a row and finishing it leaves that row unprocessed rather than risking a duplicate, so a ledger-backed backfill can quietly skip rows that a non-ledger one would have retried. `backfill:status` surfaces them; nothing retries them for you.
 
-`Backfill::fake()` with `assertCompleted` / `assertProcessed` / `assertNoFailures` is still not shipped — the facade name would collide with the `Backfill` base class, and that is worth resolving deliberately rather than in a rush. Use the `InteractsWithBackfills` trait in the meantime.
 
 ## Contributing
 

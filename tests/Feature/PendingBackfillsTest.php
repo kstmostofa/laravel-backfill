@@ -1,7 +1,6 @@
 <?php
 
 use Illuminate\Support\Facades\Queue;
-use Kstmostofa\Backfill\BackfillRegistry;
 use Kstmostofa\Backfill\Enums\RunStatus;
 use Kstmostofa\Backfill\Jobs\RunBackfillJob;
 use Kstmostofa\Backfill\Models\BackfillRun;
@@ -15,23 +14,6 @@ use Kstmostofa\Backfill\Tests\Fixtures\Pending\BackfillPendingCounts;
 use Kstmostofa\Backfill\Tests\Fixtures\Pending\BackfillPendingManual;
 use Kstmostofa\Backfill\Tests\Fixtures\Pending\BackfillPendingSlugs;
 use Kstmostofa\Backfill\Tests\Fixtures\User;
-
-/**
- * Point discovery at nothing and register exactly these, so the tests are not
- * at the mercy of every fixture in the discovery folder.
- *
- * @param  array<int, class-string>  $classes
- */
-function onlyBackfills(array $classes): void
-{
-    config()->set('backfill.path', null);
-
-    $registry = app(BackfillRegistry::class)->flush();
-
-    foreach ($classes as $class) {
-        $registry->register($class);
-    }
-}
 
 function pendingNames(): array
 {

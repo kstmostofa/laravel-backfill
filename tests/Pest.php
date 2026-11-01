@@ -1,6 +1,7 @@
 <?php
 
 use Kstmostofa\Backfill\Backfill;
+use Kstmostofa\Backfill\BackfillRegistry;
 use Kstmostofa\Backfill\Models\BackfillRun;
 use Kstmostofa\Backfill\Runner\BackfillRunner;
 use Kstmostofa\Backfill\Runner\RunOptions;
@@ -37,4 +38,21 @@ function userStateByName(): array
             'process_count' => $user->process_count,
         ]])
         ->all();
+}
+
+/**
+ * Point discovery at nothing and register exactly these, so the tests are not
+ * at the mercy of every fixture in the discovery folder.
+ *
+ * @param  array<int, class-string>  $classes
+ */
+function onlyBackfills(array $classes): void
+{
+    config()->set('backfill.path', null);
+
+    $registry = app(BackfillRegistry::class)->flush();
+
+    foreach ($classes as $class) {
+        $registry->register($class);
+    }
 }
