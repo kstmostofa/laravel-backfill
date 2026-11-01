@@ -130,6 +130,7 @@ Make `collection()` **self-excluding** — once a row has been processed it shou
 
 ```bash
 php artisan backfill:list                       # discovered backfills + last run status
+php artisan backfill:pending                    # backfills that have not finished yet
 php artisan backfill:run user-slugs --dry-run   # scope, index check, real diffs, zero writes
 php artisan backfill:run user-slugs             # resumable execution
 php artisan backfill:status user-slugs          # progress, throughput, failed rows
@@ -140,6 +141,17 @@ php artisan backfill:retry-failed user-slugs    # re-process only the rows that 
 ```
 
 Useful flags on `backfill:run`: `--dry-run` and `--samples=`, `--queue` and `--batches-per-job=`, `--fresh` (ignore a resumable run), `--batch-size=`, `--sleep=`, `--max-batches=` (stop cleanly after N batches), `--no-count` (skip the up-front estimate on tables too big to count; needs `--force` while a row ceiling is set), `--force` (skip the production guards and confirmation).
+
+## Running after a deploy
+
+Ship a backfill with the code that needs it, and let the deploy pick it up the way it picks up migrations:
+
+```bash
+php artisan migrate --force
+php artisan backfill:pending --queue --force
+```
+
+`backfill:pending` queues every backfill that has not finished yet, including paused ones, which resume from their cursor. Finished backfills are skipped, so the step is safe on every deploy. Run it with no flags to see the list, or with `--run` to run them in the foreground. Mark a backfill `public bool $manual = true;` to keep it out. Operator-panel backfills and ones with required parameters are left out automatically.
 
 ## Running on the queue
 
@@ -467,6 +479,7 @@ The helper defaults to a batch size of 2 so your tests exercise the real paginat
 | `$hydrateModels` | Set false for the raw query-builder fast path |
 | `$withoutModelEvents` | Suppress observers so they do not fire 8M times |
 | `$operatorRunnable` | Offer this in the operator panel |
+| `$manual` | Leave this out of `backfill:pending` |
 | `parameters(): array` | Inputs an operator supplies; read with `parameter()` |
 | `$ledger` | Record processed rows for work that escapes the database |
 | `$externalSideEffects` | Declares that `process()` reaches outside the database |

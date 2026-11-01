@@ -105,6 +105,29 @@ That re-processes **only** the recorded failures, rather than walking eight mill
 | `--tenant=` | Run one [tenant](/advanced/multi-tenancy) instead of all |
 | `--force` | Skip the production guards and confirmation |
 
+## Running after a deploy
+
+Ship a new backfill class alongside the code that needs it, and let the deploy pick it up the way it picks up migrations:
+
+```bash
+php artisan migrate --force
+php artisan backfill:pending --queue --force
+```
+
+`backfill:pending` finds every backfill whose latest run has not completed or been cancelled, including ones that never ran, and queues each one. A backfill paused part way through is queued again and resumes from its cursor. One that already finished is skipped, so the step is safe to run on every deploy.
+
+Use `--queue` in a deploy script. The deploy finishes straight away, and the data catches up in the background. `--run` works too, but the deploy then waits until every pending backfill has finished, and it stops at the first one that fails.
+
+Run `backfill:pending` with no flags to see what a deploy would pick up.
+
+Some backfills should never run on their own. Mark those manual:
+
+```php
+public bool $manual = true;
+```
+
+Backfills offered in the [operator panel](/features/operator-panel), or with a required [parameter](/reference/parameters), are left out automatically. Someone has to choose when they run, and with what.
+
 ## Long runs belong on the queue
 
 For anything that takes hours, use [queue mode](/features/queue):
