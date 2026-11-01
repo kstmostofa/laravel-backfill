@@ -50,6 +50,13 @@ abstract class Backfill
     public bool $operatorRunnable = false;
 
     /**
+     * Leave this backfill out of `backfill:pending`, so it only ever runs when
+     * someone starts it by name. Backfills offered in the operator panel, or
+     * with a required parameter, are left out automatically.
+     */
+    public bool $manual = false;
+
+    /**
      * Record every processed row in a ledger and skip anything already there.
      *
      * Only needed when process() does something the database cannot roll back —

@@ -26,6 +26,7 @@ Runs inside its own savepoint, so throwing rolls back this row alone and records
 | `$hydrateModels` | `true` | Set false for the query-builder fast path |
 | `$withoutModelEvents` | `false` | Suppress observers for the run |
 | `$operatorRunnable` | `false` | Offer this in the [operator panel](/features/operator-panel) |
+| `$manual` | `false` | Leave this out of [`backfill:pending`](/reference/commands#backfill-pending), so it only runs when started by name |
 | `$ledger` | `false` | Record processed rows for [external side effects](/advanced/side-effects) |
 | `$externalSideEffects` | `false` | Declares that `process()` reaches outside the database |
 

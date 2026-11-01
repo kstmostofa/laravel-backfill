@@ -16,6 +16,22 @@ php artisan backfill:list
 
 Every discovered backfill with the status of its last run, processed and failed counts, and cursor.
 
+## `backfill:pending`
+
+```bash
+php artisan backfill:pending            # list what has not finished
+php artisan backfill:pending --run      # run each one now, in name order
+php artisan backfill:pending --queue    # queue each one as a chain of short jobs
+```
+
+| Flag | |
+| --- | --- |
+| `--run` | Run each pending backfill in turn. Stops at the first one that fails |
+| `--queue` | Queue each pending backfill instead |
+| `--force` | Skip the production guards and confirmation, as on `backfill:run` |
+
+A backfill is pending until its latest run completed or was cancelled. Paused, failed and interrupted runs count, and running them resumes from the cursor. Backfills marked `$manual`, offered in the operator panel, or with a required parameter are never included. See [running after a deploy](/guide/running#running-after-a-deploy).
+
 ## `backfill:run`
 
 ```bash

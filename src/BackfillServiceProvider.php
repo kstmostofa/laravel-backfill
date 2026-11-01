@@ -11,6 +11,7 @@ use Kstmostofa\Backfill\Commands\CancelBackfillCommand;
 use Kstmostofa\Backfill\Commands\ListBackfillsCommand;
 use Kstmostofa\Backfill\Commands\MakeBackfillCommand;
 use Kstmostofa\Backfill\Commands\PauseBackfillCommand;
+use Kstmostofa\Backfill\Commands\PendingBackfillsCommand;
 use Kstmostofa\Backfill\Commands\ResumeBackfillCommand;
 use Kstmostofa\Backfill\Commands\RetryFailedBackfillCommand;
 use Kstmostofa\Backfill\Commands\RunBackfillCommand;
@@ -68,6 +69,7 @@ class BackfillServiceProvider extends ServiceProvider
             $this->commands([
                 MakeBackfillCommand::class,
                 ListBackfillsCommand::class,
+                PendingBackfillsCommand::class,
                 RunBackfillCommand::class,
                 StatusBackfillCommand::class,
                 PauseBackfillCommand::class,
